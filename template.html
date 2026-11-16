@@ -1,0 +1,507 @@
+<title>量子適用性健檢</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Sora:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an instrument-style single column — intake (data) → setup (what to test) → readout (verdict, scoreboard, diagnostics), then reference sections. */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --ink:#14202e; --muted:#5b6878; --line:#d9dfe6; --soft:#e9eef3;
+  --accent:#1f5f8b; --accent-soft:#e2edf5;
+  --classical:#3f6f96; --quantum:#b8641a;
+  --go:#1d7a4a; --go-soft:#e1f2e8; --hold:#9a6400; --hold-soft:#fbefd6; --stop:#b03a32; --stop-soft:#f8e3e1;
+  --f-display:"Sora","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-body:"Noto Sans TC","Microsoft JhengHei","PingFang TC",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f151c; --panel:#161f29; --ink:#e3e9ef; --muted:#97a4b3; --line:#283442; --soft:#1c2733;
+  --accent:#78b3dd; --accent-soft:#1a2b3a; --classical:#7fa8cc; --quantum:#e69a52;
+  --go:#6bcf98; --go-soft:#14301f; --hold:#e4b357; --hold-soft:#33280f; --stop:#ec8a80; --stop-soft:#3a1c1a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151c; --panel:#161f29; --ink:#e3e9ef; --muted:#97a4b3; --line:#283442; --soft:#1c2733;
+  --accent:#78b3dd; --accent-soft:#1a2b3a; --classical:#7fa8cc; --quantum:#e69a52;
+  --go:#6bcf98; --go-soft:#14301f; --hold:#e4b357; --hold-soft:#33280f; --stop:#ec8a80; --stop-soft:#3a1c1a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15.5px;line-height:1.7}
+.wrap{max-width:960px;margin:0 auto;padding-block:36px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:28px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-family:var(--f-display);font-size:clamp(28px,5vw,40px);line-height:1.2;letter-spacing:-.01em}
+h2{font-family:var(--f-display);font-size:21px;line-height:1.35}
+h3{font-size:16px}
+p{margin:0}
+ul,ol{margin:0;padding-left:1.25em;display:flex;flex-direction:column;gap:4px}
+a{color:var(--accent);text-underline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:13.5px}
+header{display:flex;flex-direction:column;gap:12px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.lead{font-size:17px;max-width:62ch}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);max-width:100%}
+.chip.c{background:color-mix(in srgb,var(--classical) 16%,transparent);color:var(--classical)}
+.chip.q{background:color-mix(in srgb,var(--quantum) 18%,transparent);color:var(--quantum)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.step-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.step-n{font-family:var(--f-mono);font-size:12.5px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:0 6px;line-height:1.6}
+.drop{border:1.5px dashed var(--line);border-radius:8px;padding:22px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;background:var(--soft);transition:border-color .15s, background .15s}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.btn{font:inherit;font-size:14.5px;font-weight:500;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 14px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,label.card:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--panel);font-weight:700;padding:10px 22px;font-size:15.5px}
+.btn.primary:disabled{opacity:.55;cursor:progress}
+.samples{display:flex;flex-wrap:wrap;gap:8px}
+textarea{width:100%;min-height:90px;font-family:var(--f-mono);font-size:12.5px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);padding:10px;resize:vertical}
+select,input[type=number]{font:inherit;font-size:14px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);padding:5px 8px;max-width:100%}
+.preview{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{background:var(--soft);color:var(--muted);font-weight:500;font-size:12.5px}
+tr:last-child td{border-bottom:0}
+.preview td{font-family:var(--f-mono);font-size:12.5px}
+.tasks{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media (max-width:720px){.tasks{grid-template-columns:1fr}}
+label.card{border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:4px;cursor:pointer;min-width:0;background:var(--panel)}
+label.card input{position:absolute;opacity:0;pointer-events:none}
+label.card:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+label.card .t{font-weight:700}
+label.card .d{font-size:13.5px;color:var(--muted)}
+.cfg{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center}
+.cfg label{display:flex;align-items:center;gap:8px;font-size:14px}
+.colpick{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13.5px}
+.hint{font-size:13.5px;color:var(--muted);background:var(--soft);border-radius:6px;padding:8px 12px}
+.run{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.progress{flex:1;min-width:220px;display:flex;flex-direction:column;gap:4px}
+.bar{height:6px;background:var(--soft);border-radius:3px;overflow:hidden}
+.bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.err{color:var(--stop);background:var(--stop-soft);border-radius:6px;padding:10px 14px;font-size:14.5px}
+/* readout */
+.verdict{border-radius:8px;padding:20px 22px;display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-left-width:6px}
+.verdict.red{border-left-color:var(--stop);background:var(--stop-soft)}
+.verdict.yellow{border-left-color:var(--hold);background:var(--hold-soft)}
+.verdict.green{border-left-color:var(--go);background:var(--go-soft)}
+.lamp{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:12.5px;letter-spacing:.06em;font-weight:500}
+.lamp::before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor}
+.red .lamp{color:var(--stop)} .yellow .lamp{color:var(--hold)} .green .lamp{color:var(--go)}
+.verdict h2{font-size:22px}
+.meta-row{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13.5px;color:var(--muted)}
+.board{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:minmax(0,15em) minmax(0,1fr) 7.5em;gap:12px;align-items:center;font-size:14px}
+.row .nm{display:flex;flex-direction:column;line-height:1.35;min-width:0}
+.row .nm small{color:var(--muted);font-size:12px}
+.row .track{height:16px;background:var(--soft);border-radius:3px;position:relative;overflow:hidden}
+.row .fill{position:absolute;inset:0 auto 0 0;border-radius:3px;background:var(--classical)}
+.row.quantum .fill{background:var(--quantum)}
+.row.quantum .nm b{color:var(--quantum)}
+.row .val{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:13.5px}
+.row.best .val{font-weight:700}
+@media (max-width:560px){.row{grid-template-columns:1fr 6.5em}.row .track{grid-column:1/-1;order:3}}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:var(--classical)}
+.legend span.q::before{background:var(--quantum)}
+.diag{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px 14px;align-items:start}
+.diag .st{font-size:12px;font-weight:700;padding:1px 8px;border-radius:999px;white-space:nowrap;margin-top:2px}
+.st.ok{background:var(--go-soft);color:var(--go)} .st.warn{background:var(--hold-soft);color:var(--hold)} .st.bad{background:var(--stop-soft);color:var(--stop)}
+.diag .bd{display:flex;flex-direction:column;gap:2px;min-width:0}
+.diag .bd .v{font-family:var(--f-mono);font-size:13px;overflow-wrap:anywhere}
+.diag .bd .x{font-size:13.5px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:720px){.grid2{grid-template-columns:1fr}}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+details{border:1px solid var(--line);border-radius:6px;padding:10px 14px;background:var(--panel)}
+summary{cursor:pointer;font-weight:500}
+details[open] summary{margin-bottom:8px}
+code{font-family:var(--f-mono);font-size:.88em;background:var(--soft);padding:1px 5px;border-radius:3px}
+pre{font-family:var(--f-mono);font-size:12.5px;background:var(--soft);border-radius:6px;padding:12px;overflow-x:auto;margin:0}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;counter-reset:s}
+@media (max-width:760px){.steps{grid-template-columns:1fr 1fr}}
+@media (max-width:420px){.steps{grid-template-columns:1fr}}
+.steps>div{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;background:var(--panel);min-width:0}
+.steps .k{font-family:var(--f-mono);font-size:12px;color:var(--accent)}
+.steps p{font-size:13.5px;color:var(--muted)}
+.rec{border-left:6px solid var(--classical)}
+.rec-h{font-family:var(--f-display);font-size:20px}
+.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+@media (max-width:820px){.flow{grid-template-columns:1fr 1fr}}
+@media (max-width:420px){.flow{grid-template-columns:1fr}}
+.flow>div{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0;background:var(--soft)}
+.flow .k{font-family:var(--f-mono);font-size:12px;color:var(--accent)}
+.flow p{font-size:13px;color:var(--muted)}
+td.wrap{white-space:normal;min-width:16em}
+footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:6px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">全國智慧運算與量子資訊創新應用競賽 · 量子方法適用性檢測</div>
+  <h1>量子適用性健檢</h1>
+  <p class="lead">放一小份你的資料進來，系統會在同一份資料上讓量子方法和強的古典方法正面比一次，告訴你這份資料值不值得用量子。打不贏古典，就直接說不要用。</p>
+  <div class="chips"><span class="chip">資料只在你的瀏覽器裡計算，不會上傳</span><span class="chip q">13 種量子方法</span><span class="chip c">17 種古典方法（含機器學習）</span><span class="chip">古典贏時，告訴你該用哪個方法</span></div>
+</header>
+
+<section class="panel" aria-labelledby="h-data">
+  <div class="step-h"><span class="step-n">1</span><h2 id="h-data">放入資料</h2></div>
+  <div class="drop" id="drop">
+    <p><b>把 CSV 檔拖到這裡</b>，或</p>
+    <input type="file" id="file" accept=".csv,.tsv,.txt,text/csv" aria-label="選擇 CSV 檔">
+    <p class="small muted">第一列是欄位名稱。建議 50–300 筆就好，超過會自動抽樣。</p>
+  </div>
+  <details>
+    <summary>或直接貼上 CSV 文字</summary>
+    <textarea id="paste" placeholder="source,target,weight&#10;A,B,3&#10;B,C,1"></textarea>
+    <div><button class="btn" id="usePaste" type="button">使用貼上的資料</button></div>
+  </details>
+  <div>
+    <p class="small muted" style="margin-bottom:6px">沒有資料？先用範例試試（全部是程式合成的示範資料）：</p>
+    <div class="samples">
+      <button class="btn" type="button" data-sample="cloudflare">CDN 請求日誌：辨識機器人流量</button>
+      <button class="btn" type="button" data-sample="jobs">14 個批次工作分兩個時段</button>
+      <button class="btn" type="button" data-sample="paint">汽車噴漆換色（40 款車）</button>
+      <button class="btn" type="button" data-sample="behavior">電商使用者行為分布</button>
+      <button class="btn" type="button" data-sample="schedule">4 張訂單排 3 條產線（含限制）</button>
+    </div>
+  </div>
+  <div id="dataInfo" class="small muted"></div>
+  <div class="preview" id="preview" hidden></div>
+</section>
+
+<section class="panel" aria-labelledby="h-task">
+  <div class="step-h"><span class="step-n">2</span><h2 id="h-task">要檢查什麼</h2></div>
+  <div class="hint" id="suggest">放入資料後，系統會先猜你的問題屬於哪一類。</div>
+  <div class="tasks" role="radiogroup" aria-label="問題類型">
+    <label class="card"><input type="radio" name="task" value="opt" id="t-opt"><span class="t">最佳化：二選一的分組</span><span class="d">一張「誰跟誰有關係、多強」的表。例如任務分兩個時段、伺服器分兩組、訂單兩種處理。</span></label>
+    <label class="card"><input type="radio" name="task" value="cls" id="t-cls"><span class="t">分類預測</span><span class="d">每一列是一筆紀錄，有一欄是要預測的結果。例如是不是機器人、會不會流失。</span></label>
+    <label class="card"><input type="radio" name="task" value="gen" id="t-gen"><span class="t">資料生成／分布學習</span><span class="d">多個是／否欄位，想學它們一起出現的規律，用來產生模擬資料或偵測異常組合。</span></label>
+  </div>
+  <div class="cfg" id="cfg"></div>
+  <div class="run">
+    <button class="btn primary" id="runBtn" type="button" disabled>開始健檢</button>
+    <div class="progress" aria-live="polite"><span class="small muted" id="progMsg">等待資料</span><div class="bar"><i id="progBar"></i></div></div>
+  </div>
+  <div class="err" id="err" hidden></div>
+</section>
+
+<section id="report" aria-labelledby="h-rep" style="display:flex;flex-direction:column;gap:18px">
+  <div class="step-h"><span class="step-n">3</span><h2 id="h-rep">健檢結果</h2><span class="small muted" id="repSrc"></span></div>
+  <div id="repBody" class="muted small">執行後結果會顯示在這裡。</div>
+</section>
+
+<section class="panel" aria-labelledby="h-run">
+  <h2 id="h-run">系統怎麼跑</h2>
+  <div class="flow">
+    <div><span class="k">讀資料</span><b>辨識欄位</b><p>判斷每一欄是數字還是文字、有幾種值、有沒有缺值。</p></div>
+    <div><span class="k">分類問題</span><b>猜問題類型</b><p>有起點／終點欄是最佳化，有結果欄是分類，多數是是／否欄則是分布學習。可自己改。</p></div>
+    <div><span class="k">正面比賽</span><b>量子 vs 古典</b><p>同一份資料、同一個評分方式，兩邊都在訓練資料內調參數，測試資料不參與。</p></div>
+    <div><span class="k">資料體檢</span><b>找不利因素</b><p>規模、結構、強弱差距、核函數集中、資料量等，說明為什麼量子會輸或贏。</p></div>
+    <div><span class="k">結論</span><b>燈號與建議</b><p>紅黃綠燈加理由；並推薦最適合的古典方法、現成工具與下一步。</p></div>
+  </div>
+  <p class="small muted">計算放在瀏覽器背景執行緒，網頁不會卡住。量子線路是在你的電腦上做無雜訊精確模擬，沒有連到量子硬體。</p>
+</section>
+
+<section class="panel" aria-labelledby="h-methods">
+  <h2 id="h-methods">方法一覽</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>問題</th><th>量子方法（模擬）</th><th>古典方法</th></tr></thead>
+    <tbody>
+      <tr><td>最佳化</td><td class="wrap">QAOA（1 層、2 層）、CVaR-QAOA、Warm-start QAOA、RQAOA、量子退火、VQE（硬體高效線路）、Grover 適應性搜尋</td><td class="wrap">精確窮舉、貪婪區域搜尋、多起點區域搜尋、模擬退火、禁忌搜尋、GW 半定規劃</td></tr>
+      <tr><td>分類</td><td class="wrap">量子核函數（ZZ 特徵映射）、投影量子核函數、變分量子分類器 VQC（量子神經網路）</td><td class="wrap">邏輯回歸、線性核、RBF 核函數（完整與壓縮特徵）、k 近鄰、隨機森林、神經網路</td></tr>
+      <tr><td>分布學習</td><td class="wrap">IQP 量子電路生成模型、硬體高效量子電路生成模型 QCBM</td><td class="wrap">各欄獨立、Chow-Liu 樹、伯努利混合模型、平滑直方圖</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel" aria-labelledby="h-how">
+  <h2 id="h-how">企業要怎麼準備一小份資料</h2>
+  <div class="steps">
+    <div><span class="k">挑問題</span><h3>先確定要做的決定</h3><p>要分組、要預測、還是要學分布？一份資料只回答一個問題。</p></div>
+    <div><span class="k">取樣</span><h3>匯出 50–300 筆</h3><p>不需要整份資料。挑一段有代表性的時間或範圍就好。</p></div>
+    <div><span class="k">去識別化</span><h3>拿掉個資</h3><p>IP、帳號、姓名換成代號或刪掉。只留數字、類別和結果欄。</p></div>
+    <div><span class="k">存成 CSV</span><h3>第一列放欄位名</h3><p>Excel「另存新檔 → CSV UTF-8」即可，再拖進上面的框。</p></div>
+  </div>
+  <div class="grid2">
+    <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+      <h3>以 CDN／網站流量資料為例（像 Cloudflare）</h3>
+      <ul class="small">
+        <li><b>分類：</b>從後台的安全事件或請求日誌匯出一段時間的紀錄，保留每分鐘請求數、路徑深度、回應大小、TLS 版本、是否帶 cookie 等欄位，再加一欄「是否機器人」（可用已判定的結果）。</li>
+        <li><b>最佳化：</b>把伺服器或服務之間的流量、衝突或延遲整理成「起點, 終點, 數值」三欄，檢查分成兩群的問題適不適合 QAOA。</li>
+        <li><b>分布學習：</b>把每筆請求轉成幾個是／否欄位（是否行動裝置、是否夜間、是否被挑戰…），看量子生成模型能不能學起來。</li>
+      </ul>
+      <p class="small muted">各家後台的匯出位置會改版，找「Logs」「Analytics」「Security events」「Export CSV」這類選項即可。</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+      <h3>三種格式</h3>
+      <pre>最佳化（邊清單）
+source,target,weight
+job01,job02,3
+job01,job05,1
+
+分類（最後一欄或名為 label 的欄當目標）
+rpm,path_depth,has_cookie,is_bot
+12,3,1,0
+140,1,0,1
+
+分布學習（是／否欄位）
+mobile,night,added_cart,purchased
+1,0,1,0</pre>
+    </div>
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="h-fair">
+  <h2 id="h-fair">怎麼比才算公平</h2>
+  <div class="grid2">
+    <ul class="small">
+      <li><b>同一份資料、同一個評分方式、重複多次。</b>最佳化的隨機方法各跑 3 次；分類做 5 折交叉驗證並重複 3 次；分布學習做 3 次不同的資料切分。</li><li><b>用統計檢定判斷輸贏。</b>分類用 Nadeau–Bengio 修正 t 檢定，分布學習用逐筆配對檢定；量子模型有好幾個、挑最好的會占便宜，所以綠燈用 Bonferroni 校正後的門檻。</li>
+      <li><b>兩邊都調參數。</b>量子核函數的頻寬、古典 RBF 的寬度、正則化都只在訓練資料裡挑，測試資料不參與。</li>
+      <li><b>古典對手要夠強。</b>不只比貪婪法，也比禁忌搜尋、模擬退火、精確窮舉；分類有邏輯回歸、RBF、k 近鄰、隨機森林、神經網路；生成有 Chow-Liu 樹、混合模型和直方圖。</li>
+    </ul>
+    <ul class="small">
+      <li><b>量子部分是精確模擬。</b>QAOA 類方法用完整量子態模擬（14 量子位元以內），RQAOA 用 p=1 的精確公式，量子核函數與 IQP 模型也是完整量子態。沒有雜訊，所以是量子方法的<b>最好情況</b>。</li>
+      <li><b>綠燈不等於量子優勢。</b>這裡的量子模擬本身就跑在古典電腦上，綠燈的意思是「值得拿更大的資料、上真機再測」。</li>
+      <li><b>紅燈是有用的結論。</b>知道不該用量子，可以省下買硬體、外包和研究的時間。</li>
+    </ul>
+  </div>
+  <details>
+    <summary>每個檢查項目背後的研究依據</summary>
+    <ul class="small">
+      <li>RQAOA：Bravyi 等，Obstacles to Variational Quantum Optimization from Symmetry Protection（2019，arXiv:1910.08980）。我們隊上五輪實測發現：關係強弱差距大、連線密時 RQAOA 容易綁錯（Wi-Fi 頻道規劃 0 勝 1 平 19 負），強度一致且稀疏時較好（汽車噴漆對專用方法 32 勝 8 平 0 負，但仍輸禁忌搜尋）。</li>
+      <li>p=1 精確公式：Ozaeta、van Dam、McMahon，Expectation values from the single-layer QAOA on Ising problems（2022）。本系統的公式已和完整量子態模擬比對，誤差約 10⁻¹⁶。</li>
+      <li>CVaR-QAOA：Barkoutsos 等（2020，Quantum 4, 256）。Warm-start QAOA：Egger 等（2021，Quantum 5, 479），本系統用離散初始解與 ε=0.25 的正則化。</li>
+      <li>量子核函數：Havlíček 等（2019，Nature 567）。幾何差距 g：Huang 等，Power of data in quantum machine learning（2021，Nature Communications 12）。頻寬需調整：Shaydulin、Wild（2022）。</li>
+      <li>IQP 生成模型：Born machine 的 IQP 版本，用精確梯度訓練；硬體高效 QCBM：Benedetti 等（2019，npj Quantum Information 5）。古典對手 Chow-Liu 樹（1968）。</li>
+      <li>量子退火：Farhi 等（2000）絕熱量子計算，這裡用離散化的線性排程模擬。VQE：Peruzzo 等（2014）、Kandala 等（2017）硬體高效線路。Grover 適應性搜尋：Dürr、Høyer（1996）、Gilliam 等（2021）。</li>
+      <li>投影量子核函數：Huang 等（2021）。變分量子分類器：Havlíček 等（2019）、Schuld 等（2020）。GW 半定規劃：Goemans、Williamson（1995）。</li>
+    </ul>
+  </details>
+</section>
+
+<section class="panel" aria-labelledby="h-scope">
+  <h2 id="h-scope">這個工具能證明什麼、不能證明什麼</h2>
+  <div class="grid2">
+    <ul class="small">
+      <li><b>它是篩檢工具。</b>主要功能是在企業投入之前，排除「用量子沒有好處」的情況，並告訴他們該用哪個古典方法。</li>
+      <li><b>紅燈和黃燈是可靠的結論。</b>量子方法在無雜訊、參數也調過的最好情況下都沒贏，換到真機只會更差。</li>
+      <li><b>綠燈只代表值得再測。</b>這裡的量子模擬本身跑在古典電腦上，所以就算綠燈，也不能說有量子優勢。</li>
+    </ul>
+    <ul class="small">
+      <li><b>小規模最佳化幾乎一定是紅燈。</b>完整量子模擬只能做到 14 個變數，但這個規模古典窮舉一定解得出來。這是模擬的物理限制，不是故意讓量子輸。</li>
+      <li><b>超過 20 個變數時只剩 RQAOA。</b>它的 p=1 版本可以被古典電腦精確算出，所以就算追平或贏，也要再用更深的線路和真機驗證。</li>
+      <li><b>分布學習目前偵測不到量子的好處。</b>校正實驗顯示，即使資料本身就是量子線路產生的，量子生成模型也訓練不到正確答案（見下方）。</li>
+    </ul>
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="h-calib">
+  <h2 id="h-calib">門檻怎麼來的：校正實驗</h2>
+  <p class="small">我們把整套流程拿去跑「答案已知」的資料。<b>對照組</b>的資料由古典規則產生，量子不該拿綠燈，用來看誤判率；<b>植入組</b>的標籤或樣本由量子線路產生，用來看工具能不能抓到量子的好處。程式在 <code>tests/calibrate.js</code>，可重跑。</p>
+  <div class="tbl"><table>
+    <thead><tr><th>問題</th><th>資料</th><th class="mono">份數</th><th>紅燈</th><th>黃燈</th><th>綠燈</th><th>結論</th></tr></thead>
+    <tbody>
+      <tr><td>分類</td><td class="wrap">對照組：CDN 合成日誌、線性規則、同心圓規則</td><td class="mono">8</td><td class="mono">3</td><td class="mono">5</td><td class="mono">0</td><td class="wrap">沒有誤判成綠燈（誤判 0/8）</td></tr>
+      <tr><td>分類</td><td class="wrap">植入組：標籤由 ZZ 量子核函數產生</td><td class="mono">4</td><td class="mono">0</td><td class="mono">0</td><td class="mono">4</td><td class="wrap">4 份都抓到（偵測 4/4）</td></tr>
+      <tr><td>分布學習</td><td class="wrap">對照組：電商行為、馬可夫鏈</td><td class="mono">4</td><td class="mono">4</td><td class="mono">0</td><td class="mono">0</td><td class="wrap">沒有誤判（誤判 0/4）</td></tr>
+      <tr><td>分布學習</td><td class="wrap">植入組：樣本由隨機 IQP 線路產生</td><td class="mono">4</td><td class="mono">4</td><td class="mono">0</td><td class="mono">0</td><td class="wrap">一份都沒抓到（偵測 0/4）：量子模型訓練卡在局部最小值</td></tr>
+    </tbody>
+  </table></div>
+  <p class="small muted">樣本數少（每組 4–8 份），只能說明大致趨勢，不能精確估計誤判率。資料體檢裡的門檻（關係強弱差距 10 倍、幾何差距比值 0.3、資料量是組合數的 2 倍）仍是經驗規則：前兩個來自隊上五輪實驗與 Huang 等（2021），沒有經過這個校正實驗，所以只用來解釋結果，不決定燈號。</p>
+</section>
+
+<section class="panel" aria-labelledby="h-limit">
+  <h2 id="h-limit">這個網頁版能做到哪裡</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>項目</th><th>網頁版上限</th><th>超過時</th></tr></thead>
+    <tbody>
+      <tr><td>QAOA／CVaR／Warm-start／量子退火／Grover</td><td class="mono">14 個變數</td><td>只跑 RQAOA；更大請用 Colab 版搭配 Qiskit</td></tr>
+      <tr><td>VQE</td><td class="mono">12 個變數</td><td>略過</td></tr>
+      <tr><td>0/1 問題規格表、QUBO</td><td class="mono">200 個變數</td><td>超過時請用 Colab 版</td></tr>
+      <tr><td>RQAOA</td><td class="mono">200 個變數</td><td>從連線最多的節點開始抽樣 200 個</td></tr>
+      <tr><td>分類</td><td class="mono">240 筆、6 量子位元</td><td>分層抽樣；特徵先用主成分分析壓到 6 維</td></tr>
+      <tr><td>分布學習</td><td class="mono">10 個欄位</td><td>取變化最大的 10 欄</td></tr>
+    </tbody>
+  </table></div>
+  <p class="small muted">小樣本不一定代表整份資料。結果是黃燈或綠燈時，請換幾段不同的樣本再測，或用 Colab 版跑大一點的資料。</p>
+</section>
+
+<footer>
+  <p>研究團隊：Johnny 等（全國智慧運算與量子資訊創新應用競賽）。所有範例資料都是程式合成的示範資料。</p>
+  <p>量子部分均為古典電腦上的精確模擬，沒有呼叫量子硬體。</p>
+</footer>
+</div>
+
+<script id="qfc-engine">
+/*__ENGINE__*/
+</script>
+<script>
+(function(){
+  const E = window.QFC;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let table = null, source = '', worker = null, running = false, lastResult = null, suggestedMode = null;
+
+  // worker from the engine source
+  const glue = `
+self.onmessage = function(ev){
+  const {task, t, cfg} = ev.data; const E = self.QFC;
+  const prog = (msg, pct) => self.postMessage({type:'progress', msg, pct});
+  try {
+    let res;
+    if (task === 'opt') { const g = (cfg.mode === 'spec' || cfg.mode === 'qubo') ? E.buildQubo(t, cfg) : E.buildGraph(t, cfg); res = E.analyzeOpt(g, prog); }
+    else if (task === 'cls') { const P = E.prepareCls(t, cfg.label); res = E.analyzeCls(P, prog); }
+    else { const P = E.prepareGen(t, cfg.cols); res = E.analyzeGen(P, prog); }
+    self.postMessage({type:'done', res});
+  } catch (e) { self.postMessage({type:'error', msg: e.message || String(e)}); }
+};`;
+  function makeWorker(){
+    try { const src = $('qfc-engine').textContent + '\n' + glue; return new Worker(URL.createObjectURL(new Blob([src], {type:'text/javascript'}))); }
+    catch(e){ return null; }
+  }
+
+  function setData(text, label){
+    const t = E.parseCSV(text);
+    if (!t.rows.length || t.header.length < 2) { showErr('讀不到資料：請確認是 CSV 格式，而且至少有兩欄。'); return false; }
+    table = t; source = label; hideErr();
+    $('dataInfo').textContent = '已載入「' + label + '」：' + t.rows.length.toLocaleString() + ' 筆 × ' + t.header.length + ' 欄' + (t.truncated ? '（只讀前 20,000 筆）' : '');
+    const pv = $('preview'); pv.hidden = false;
+    pv.innerHTML = '<table><thead><tr>' + t.header.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' + t.rows.slice(0,5).map(r => '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+    const sg = E.suggestTask(t); suggestedMode = sg.mode || null;
+    $('suggest').textContent = '系統判斷：' + sg.why;
+    setTask(sg.task);
+    $('runBtn').disabled = false; $('progMsg').textContent = '準備好了';
+    return true;
+  }
+  function setTask(task){ $('t-' + task).checked = true; renderCfg(); }
+  function currentTask(){ const el = document.querySelector('input[name=task]:checked'); return el ? el.value : 'cls'; }
+  function opts(sel){ return table.header.map((h,i) => '<option value="' + i + '"' + (i === sel ? ' selected' : '') + '>' + esc(h) + '</option>').join(''); }
+  function renderCfg(){
+    if (!table) return; const task = currentTask(); const c = $('cfg'); const w = table.header.length;
+    if (task === 'opt') {
+      const square = w === table.rows.length; const md = suggestedMode || (square ? 'matrix' : 'edges');
+      const o = (v, t2) => '<option value="' + v + '"' + (md === v ? ' selected' : '') + '>' + t2 + '</option>';
+      c.innerHTML = '<label>資料形式 <select id="c-mode">' + o('edges', '邊清單：分兩組（起點, 終點, 強度）') + o('matrix', '關係矩陣：分兩組（方陣）') + o('spec', '0/1 問題規格表（可含限制）') + o('qubo', 'QUBO 矩陣（方陣，對角線是單一變數成本）') + '</select></label>' +
+        '<span id="c-edgecols" style="display:contents"><label>起點欄 <select id="c-src">' + opts(0) + '</select></label><label>終點欄 <select id="c-dst">' + opts(1) + '</select></label>' +
+        '<label>強度欄 <select id="c-w"><option value="-1">沒有（全部算 1）</option>' + opts(w >= 3 ? 2 : -9) + '</select></label></span>' +
+        '<p class="small muted" style="flex-basis:100%" id="c-modehint"></p>';
+      const hint = () => { const m2 = $('c-mode').value; $('c-edgecols').hidden = m2 !== 'edges'; $('c-edgecols').style.display = m2 === 'edges' ? 'contents' : 'none';
+        $('c-modehint').textContent = m2 === 'spec' ? '每列一條規則：linear（a 變數被選時的成本）、pair（a 和 b 同時被選的成本）、member（變數 b 屬於群組 a）、choose（群組 a 剛好選 b 個，penalty 可自訂懲罰係數）。目標是總成本最低。' : m2 === 'qubo' ? '最小化 xᵀQx，x 是 0/1。對角線是單一變數的成本，非對角線是兩兩一起選的成本。' : '目標：把節點分成兩組，讓「跨組的關係強度總和」最大（例如有衝突的工作分到不同時段）。強度可以是負的，代表希望同組。'; };
+      $('c-mode').addEventListener('change', hint); hint();
+    } else if (task === 'cls') {
+      let li = E.guessLabel(table); if (li < 0) li = w - 1;
+      c.innerHTML = '<label>要預測的欄位 <select id="c-label">' + opts(li) + '</select></label><p class="small muted" style="flex-basis:100%">其他欄位都當作特徵：數值欄直接用，文字欄若種類在 10 種以內會自動轉成是／否欄位，其餘（像 ID）會略過。</p>';
+    } else {
+      c.innerHTML = '<div style="flex-basis:100%;display:flex;flex-direction:column;gap:6px"><span class="small">要學的欄位（最多 10 個；數值欄會用「是否大於中位數」轉成是／否）</span><div class="colpick">' +
+        table.header.map((h,i) => '<label><input type="checkbox" class="c-col" value="' + i + '"' + (i < 10 ? ' checked' : '') + '> ' + esc(h) + '</label>').join('') + '</div></div>';
+    }
+  }
+  function readCfg(){
+    const task = currentTask();
+    if (task === 'opt') { const wv = Number($('c-w').value); return { mode: $('c-mode').value === 'spec' || $('c-mode').value === 'qubo' ? $('c-mode').value : $('c-mode').value, src: Number($('c-src').value), dst: Number($('c-dst').value), weight: wv < 0 ? -1 : wv }; }
+    if (task === 'cls') return { label: Number($('c-label').value) };
+    return { cols: Array.from(document.querySelectorAll('.c-col:checked')).map(x => Number(x.value)).slice(0,10) };
+  }
+  function showErr(m){ const e = $('err'); e.textContent = m; e.hidden = false; }
+  function hideErr(){ $('err').hidden = true; }
+  function prog(msg, pct){ $('progMsg').textContent = msg; if (pct != null) $('progBar').style.width = Math.max(2, Math.min(100, pct)) + '%'; }
+
+  function run(){
+    if (!table || running) return;
+    const task = currentTask(); let cfg; try { cfg = readCfg(); } catch(e) { showErr('設定讀取失敗：' + e.message); return; }
+    if (task === 'opt' && cfg.weight === -1) cfg.weight = -1;
+    hideErr(); running = true; $('runBtn').disabled = true; prog('開始計算…', 3);
+    const finish = (res, err) => {
+      running = false; $('runBtn').disabled = false;
+      if (err) { showErr(err); prog('沒有完成', 0); return; }
+      prog('完成', 100); lastResult = res; renderReport(res);
+    };
+    if (!worker) worker = makeWorker();
+    if (worker) {
+      worker.onmessage = ev => { const d = ev.data; if (d.type === 'progress') prog(d.msg, d.pct); else if (d.type === 'done') finish(d.res); else finish(null, d.msg); };
+      worker.onerror = e => { worker = null; finish(null, '計算時發生錯誤：' + (e.message || '未知錯誤')); };
+      worker.postMessage({ task, t: table, cfg });
+    } else {
+      setTimeout(() => { try { let res; if (task === 'opt') { const g = (cfg.mode === 'spec' || cfg.mode === 'qubo') ? E.buildQubo(table, cfg) : E.buildGraph(table, cfg); res = E.analyzeOpt(g, prog); } else if (task === 'cls') res = E.analyzeCls(E.prepareCls(table, cfg.label), prog); else res = E.analyzeGen(E.prepareGen(table, cfg.cols), prog); finish(res); } catch(e) { finish(null, e.message); } }, 30);
+    }
+  }
+
+  const LV = { red: '紅燈 · 不建議用量子', yellow: '黃燈 · 量子沒有明顯好處', green: '綠燈 · 值得深入測試' };
+  function fmtMs(ms){ return ms < 1 ? '<1 ms' : ms < 1000 ? ms.toFixed(0) + ' ms' : (ms/1000).toFixed(1) + ' s'; }
+  function bars(items, higherBetter, fmt){
+    const vals = items.map(x => x.v); const best = higherBetter ? Math.max(...vals) : Math.min(...vals);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    if (higherBetter) { lo = Math.min(lo, 0); } else { lo = Math.min(lo, 0); }
+    const span = (hi - lo) || 1;
+    return '<div class="board">' + items.map(x => {
+      const w = Math.max(3, (x.v - lo) / span * 100);
+      const isBest = Math.abs(x.v - best) < 1e-9;
+      return '<div class="row ' + x.kind + (isBest ? ' best' : '') + '"><span class="nm"><b>' + esc(x.name) + '</b>' + (x.sub ? '<small>' + esc(x.sub) + '</small>' : '') + '</span><span class="track" aria-hidden="true"><span class="fill" style="width:' + w.toFixed(1) + '%"></span></span><span class="val">' + fmt(x.v) + (isBest ? ' ★' : '') + '</span></div>';
+    }).join('') + '</div><div class="legend"><span>古典方法</span><span class="q">量子方法（模擬）</span><span>★ 最好</span></div>';
+  }
+  function diagHTML(ds){ const L = {ok:'正常', warn:'注意', bad:'不利量子'}; return '<div class="diag">' + ds.map(d => '<span class="st ' + d.status + '">' + L[d.status] + '</span><div class="bd"><b>' + esc(d.name) + '</b><span class="v">' + esc(d.value) + '</span><span class="x">' + esc(d.explain) + '</span></div>').join('') + '</div>'; }
+
+  function renderReport(res){
+    $('repSrc').textContent = '資料：' + source;
+    const v = res.verdict; let html = '';
+    html += '<div class="verdict ' + v.level + '"><span class="lamp">' + LV[v.level] + '</span><h2>' + esc(v.title) + '</h2><ul>' + v.reasons.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul></div>';
+    if (res.task === 'opt') {
+      html += '<div class="meta-row"><span>' + (res.qubo ? res.qubo.nv + ' 個 0/1 變數（加 1 個參考位元）' : res.n + ' 個變數') + '</span><span>' + res.m + ' 條關係</span><span>每種隨機方法獨立跑 ' + res.seeds + ' 次</span>' + (res.qubo && res.qubo.groups.length ? '<span>' + res.qubo.groups.length + ' 條「剛好選 k 個」限制（懲罰係數 ' + res.qubo.groups[0].penalty + '）</span>' : '') + (res.sampled ? '<span>從 ' + res.originalN + ' 個節點抽樣</span>' : '') + (res.sv ? '<span>量子態完整模擬 ' + res.sv.n + ' 量子位元，每種方法 ' + res.sv.shots + ' 次量測</span>' : '<span>超過 14 個變數，QAOA／CVaR／Warm-start 未執行</span>') + '</div>';
+      const runs = m => m.deterministic ? '確定性，跑 1 次' : res.seeds + ' 次中最好；平均 ' + (+(res.qubo ? m.costMean : m.mean).toFixed(2));
+      if (res.qubo) html += '<div class="panel"><h3>每種方法找到的最低成本（越低越好）</h3>' + bars(res.methods.map(m => ({ name: m.name, kind: m.kind, v: m.cost, sub: (m.feasible ? '滿足全部限制' : '違反 ' + m.viol.length + ' 條限制') + '；' + runs(m) + '；每次 ' + fmtMs(m.ms) })), false, x => (+x.toFixed(3)).toLocaleString()) + '<p class="small muted">最好答案選了：' + esc((res.methods.find(m => m.kind === 'classical' && m.feasible) || res.methods[0]).chosen.join('、')) + '</p></div>';
+      else html += '<div class="panel"><h3>每種方法找到的最好答案（跨組強度總和，越大越好）</h3>' + bars(res.methods.map(m => ({ name: m.name, kind: m.kind, v: m.value, sub: runs(m) + '；' + (m.note ? m.note + '；' : '') + '每次 ' + fmtMs(m.ms) })), true, x => (+x.toFixed(3)).toLocaleString()) + '</div>';
+      html += '<p class="small muted">量子方法的時間是「在古典電腦上模擬」的時間，不代表量子硬體的速度，不能拿來比快慢。</p>';
+      const qsv = res.methods.filter(m => m.expected != null);
+      if (qsv.length) {
+        html += '<div class="panel"><h3>量子方法的細節</h3><p class="small muted">「最好的一次」只看 1024 次量測中最好的；「平均」和「抽到最佳解的機率」才看得出線路本身好不好。</p><div class="tbl"><table><thead><tr><th>方法</th><th>最好的一次</th><th>平均答案</th><th>抽到最佳解的機率</th><th>雙位元閘數</th></tr></thead><tbody>' +
+          qsv.map(m => '<tr><td>' + esc(m.name) + '</td><td class="mono">' + (+m.value.toFixed(3)) + '</td><td class="mono">' + m.expected.toFixed(2) + '</td><td class="mono">' + (m.pOpt * 100).toFixed(2) + '%</td><td class="mono">' + m.twoQ + '</td></tr>').join('') + '</tbody></table></div></div>';
+      }
+    } else if (res.task === 'cls') {
+      html += '<div class="meta-row"><span>預測「' + esc(res.labelName) + '」</span><span>' + res.n + ' 筆</span><span>類別分布：' + res.classes.map((c,i) => esc(c) + ' ' + res.classCounts[i]).join('、') + '</span><span>量子核函數 ' + res.q + ' 量子位元</span></div>';
+      html += '<div class="panel"><h3>平衡準確率（5 折交叉驗證 × ' + res.repeats + ' 次，越高越好）</h3>' + bars(res.models.map(m => ({ name: m.name, kind: m.kind, v: m.mean, sub: '± ' + (m.sd * 100).toFixed(1) + ' 個百分點' })), true, x => (x * 100).toFixed(1) + '%') + '</div>';
+      html += '<div class="panel"><h3>量子核函數的頻寬掃描</h3><p class="small muted">頻寬越大，資料點在量子空間裡越「互不相似」；標準差掉到接近 0 就是核函數集中，模型會學不到東西。</p><div class="tbl"><table><thead><tr><th>頻寬</th><th>平均相似度</th><th>相似度標準差</th></tr></thead><tbody>' + res.concentration.map(c => '<tr><td class="mono">' + c.lam + '</td><td class="mono">' + c.mean.toFixed(3) + '</td><td class="mono">' + c.sd.toFixed(3) + '</td></tr>').join('') + '</tbody></table></div></div>';
+    } else {
+      html += '<div class="meta-row"><span>' + res.nb + ' 個是／否欄位</span><span>訓練 ' + res.nTrain + ' 筆、測試 ' + res.nTest + ' 筆</span></div>';
+      html += '<div class="panel"><h3>沒看過的測試資料：每筆平均要幾 bits 描述（越低越好）</h3>' + bars(res.models.map(m => ({ name: m.name, kind: m.kind, v: m.test, sub: '± ' + m.testSd.toFixed(3) + '（' + res.seeds + ' 次不同切分）；訓練 ' + m.train.toFixed(3) + '；參數 ' + m.params })), false, x => x.toFixed(3)) + '</div>';
+      html += '<div class="panel"><h3>使用的欄位</h3><p class="small">' + res.bits.map(b => esc(b.name) + '（' + esc(b.desc) + '）').join('、') + '</p></div>';
+    }
+    if (res.recommend) {
+      const rc = res.recommend; const qWins = v.level === 'green';
+      html += '<div class="panel rec"><span class="eyebrow">' + (qWins ? '量子值得再測，古典對照組請用' : '建議直接用古典方法') + '</span><h3 class="rec-h">' + esc(rc.primary) + '</h3><p>' + esc(rc.why) + '</p>' +
+        '<div class="grid2"><div><b class="small">可用的工具</b><ul class="small">' + rc.tools.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></div>' +
+        '<div><b class="small">' + (rc.alts.length ? '其他也不錯的選擇' : '') + '</b><ul class="small">' + rc.alts.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></div></div>' +
+        '<div><b class="small">下一步</b><ol class="small">' + rc.steps.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div></div>';
+    }
+    html += '<div class="panel"><h3>資料體檢</h3>' + diagHTML(res.diagnostics) + '</div>';
+    html += '<div class="run"><button class="btn" type="button" id="copyRep">複製文字報告</button><span class="small muted" id="copyMsg"></span></div>';
+    html += '<textarea id="repText" readonly hidden></textarea>';
+    $('repBody').className = ''; $('repBody').innerHTML = html;
+    $('copyRep').onclick = () => { const txt = textReport(res); const ta = $('repText'); ta.value = txt; navigator.clipboard && navigator.clipboard.writeText(txt).then(() => { $('copyMsg').textContent = '已複製'; }, () => { ta.hidden = false; ta.select(); $('copyMsg').textContent = '請手動複製下方文字'; }); if (!navigator.clipboard) { ta.hidden = false; ta.select(); } };
+  }
+  function textReport(res){
+    const L = { red: '紅燈', yellow: '黃燈', green: '綠燈' }; const v = res.verdict; const out = [];
+    out.push('# 量子適用性健檢報告', '資料：' + source, '結論：' + L[v.level] + '｜' + v.title, ...v.reasons.map(r => '- ' + r), '');
+    if (res.task === 'opt') { out.push('| 方法 | 類型 | 最好答案 | 時間 |', '|---|---|---|---|'); res.methods.forEach(m => out.push('| ' + m.name + ' | ' + (m.kind === 'quantum' ? '量子(模擬)' : '古典') + ' | ' + (res.qubo ? '成本 ' + (+m.cost.toFixed(3)) + (m.feasible ? '' : '（違反限制）') : (+m.value.toFixed(3))) + ' | ' + fmtMs(m.ms) + ' |')); }
+    else if (res.task === 'cls') { out.push('| 模型 | 類型 | 平衡準確率 |', '|---|---|---|'); res.models.forEach(m => out.push('| ' + m.name + ' | ' + (m.kind === 'quantum' ? '量子(模擬)' : '古典') + ' | ' + (m.mean * 100).toFixed(1) + '% ± ' + (m.sd * 100).toFixed(1) + ' |')); }
+    else { out.push('| 模型 | 類型 | 測試 bits/筆 |', '|---|---|---|'); res.models.forEach(m => out.push('| ' + m.name + ' | ' + (m.kind === 'quantum' ? '量子(模擬)' : '古典') + ' | ' + m.test.toFixed(3) + ' |')); }
+    if (res.recommend) { out.push('', '## 建議的古典方法：' + res.recommend.primary, res.recommend.why, ...res.recommend.tools.map(t => '- 工具：' + t), ...res.recommend.steps.map(t => '- 下一步：' + t)); }
+    out.push('', '## 資料體檢'); res.diagnostics.forEach(d => out.push('- [' + d.status + '] ' + d.name + '：' + d.value));
+    out.push('', '註：量子部分為古典電腦上的無雜訊精確模擬；綠燈代表值得進一步測試，不代表量子優勢。');
+    return out.join('\n');
+  }
+
+  // events
+  const SAMPLE = { cloudflare: ['CDN 請求日誌（合成）', () => E.samples.cloudflare(), 'cls'], jobs: ['14 個批次工作（合成）', () => E.samples.jobs(), 'opt'], paint: ['汽車噴漆換色 40 款車（合成）', () => E.samples.paint(), 'opt'], behavior: ['電商使用者行為（合成）', () => E.samples.behavior(), 'gen'], schedule: ['4 張訂單 × 3 條產線（合成）', () => E.samples.schedule(), 'opt'] };
+  document.querySelectorAll('[data-sample]').forEach(b => b.addEventListener('click', () => { const s = SAMPLE[b.dataset.sample]; if (setData(s[1](), s[0])) { setTask(s[2]); if (b.dataset.sample === 'paint') $('suggest').textContent = '噴漆換色已轉成等價的 Ising 形式：每款車一個變數（先紅或先藍），強度是相鄰車身的關係。跨組強度越大，換色次數越少。'; run(); } }));
+  document.querySelectorAll('input[name=task]').forEach(r => r.addEventListener('change', renderCfg));
+  $('runBtn').addEventListener('click', run);
+  $('usePaste').addEventListener('click', () => setData($('paste').value, '貼上的資料'));
+  const readFile = f => { if (!f) return; if (f.size > 15e6) { showErr('檔案超過 15 MB，請先抽樣成小檔再上傳。'); return; } const fr = new FileReader(); fr.onload = () => setData(fr.result, f.name); fr.onerror = () => showErr('讀檔失敗，請再試一次。'); fr.readAsText(f); };
+  $('file').addEventListener('change', e => readFile(e.target.files[0]));
+  const drop = $('drop');
+  ['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => readFile(e.dataTransfer.files[0]));
+
+  // open in a working state: run the CDN sample
+  const s = SAMPLE.cloudflare; if (setData(s[1](), s[0])) { setTask('cls'); run(); }
+})();
+</script>
