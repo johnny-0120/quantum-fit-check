@@ -46,6 +46,7 @@ header{display:flex;flex-direction:column;gap:12px}
 .step-n{font-family:var(--f-mono);font-size:12.5px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:0 6px;line-height:1.6}
 .drop{border:1.5px dashed var(--line);border-radius:8px;padding:22px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;background:var(--soft);transition:border-color .15s, background .15s}
 .drop.over{border-color:var(--accent);background:var(--accent-soft)}
+a.btn{display:inline-block;text-decoration:none}
 .btn{font:inherit;font-size:14.5px;font-weight:500;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 14px;cursor:pointer}
 .btn:hover{border-color:var(--accent)}
 .btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,label.card:focus-within{outline:2px solid var(--accent);outline-offset:2px}
@@ -173,12 +174,13 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
   <div class="tasks" role="radiogroup" aria-label="問題類型">
     <label class="card"><input type="radio" name="task" value="opt" id="t-opt"><span class="t">最佳化：二選一的分組</span><span class="d">一張「誰跟誰有關係、多強」的表。例如任務分兩個時段、伺服器分兩組、訂單兩種處理。</span></label>
     <label class="card"><input type="radio" name="task" value="cls" id="t-cls"><span class="t">分類預測</span><span class="d">每一列是一筆紀錄，有一欄是要預測的結果。例如是不是機器人、會不會流失。</span></label>
-    <label class="card"><input type="radio" name="task" value="gen" id="t-gen"><span class="t">資料生成／分布學習</span><span class="d">多個是／否欄位，想學它們一起出現的規律，用來產生模擬資料或偵測異常組合。</span></label>
+    <label class="card"><input type="radio" name="task" value="gen" id="t-gen"><span class="t">資料生成／分布學習 <span class="chip" style="font-size:11.5px">實驗性</span></span><span class="d">多個是／否欄位，想學它們一起出現的規律，用來產生模擬資料或偵測異常組合。</span></label>
   </div>
   <div class="cfg" id="cfg"></div>
   <div class="run">
     <button class="btn primary" id="runBtn" type="button" disabled>開始健檢</button>
-    <div class="progress" aria-live="polite"><span class="small muted" id="progMsg">等待資料</span><div class="bar"><i id="progBar"></i></div></div>
+    <button class="btn" id="cancelBtn" type="button" hidden>取消</button>
+    <div class="progress" aria-live="polite"><span class="small muted" id="progMsg">等待資料</span><span class="small muted" id="estMsg"></span><div class="bar"><i id="progBar"></i></div></div>
   </div>
   <div class="err" id="err" hidden></div>
 </section>
@@ -322,10 +324,12 @@ mobile,night,added_cart,purchased
     </tbody>
   </table></div>
   <p class="small muted">小樣本不一定代表整份資料。結果是黃燈或綠燈時，請換幾段不同的樣本再測，或用 Colab 版跑大一點的資料。</p>
+  <div><a class="btn" href="https://colab.research.google.com/github/johnny-0120/quantum-fit-check/blob/main/colab/quantum_fit_check_colab.ipynb" target="_blank" rel="noopener">在 Colab 開啟完整版</a> <span class="small muted">用 Google 帳號登入後，點「執行階段 → 全部執行」，跑到上傳那一格時選你的 CSV。</span></div>
 </section>
 
 <footer>
   <p>全國智慧運算與量子資訊創新應用競賽參賽團隊。所有範例資料都是程式合成的示範資料。</p>
+  <p><a href="https://github.com/johnny-0120/quantum-fit-check" target="_blank" rel="noopener">原始碼（GitHub）</a> · <a href="https://github.com/johnny-0120/quantum-fit-check/issues/new" target="_blank" rel="noopener">回報問題或建議</a> · <a href="https://colab.research.google.com/github/johnny-0120/quantum-fit-check/blob/main/colab/quantum_fit_check_colab.ipynb" target="_blank" rel="noopener">在 Colab 開啟完整版</a> · MIT 授權</p>
   <p>量子部分均為古典電腦上的精確模擬，沒有呼叫量子硬體。</p>
 </footer>
 </div>
@@ -1610,17 +1614,30 @@ self.onmessage = function(ev){
     if (task === 'cls') return { label: Number($('c-label').value) };
     return { cols: Array.from(document.querySelectorAll('.c-col:checked')).map(x => Number(x.value)).slice(0,10) };
   }
-  function showErr(m){ const e = $('err'); e.textContent = m; e.hidden = false; }
+  function showErr(m){ const e = $('err'); e.innerHTML = esc(m) + ' <span class="small">看不懂或覺得是程式的問題？<a href="https://github.com/johnny-0120/quantum-fit-check/issues/new" target="_blank" rel="noopener">回報問題</a>（請不要附上機密資料）。</span>'; e.hidden = false; }
   function hideErr(){ $('err').hidden = true; }
   function prog(msg, pct){ $('progMsg').textContent = msg; if (pct != null) $('progBar').style.width = Math.max(2, Math.min(100, pct)) + '%'; }
 
+  let timer = null, t0run = 0;
+  function estimate(task, cfg){
+    const n = table.rows.length;
+    if (task === 'cls') { const k = Math.min(n, 240); return Math.round(8 + 25 * k / 240); }
+    if (task === 'gen') { const b = Math.min(10, (cfg.cols || []).length || table.header.length); return Math.round(3 + 6 * Math.pow(2, b) / 1024); }
+    const v = cfg.mode === 'spec' || cfg.mode === 'qubo' ? Math.max(table.rows.length / 3, 3) : (cfg.mode === 'matrix' ? table.header.length : new Set(table.rows.map(r => r[cfg.src]).concat(table.rows.map(r => r[cfg.dst]))).size);
+    return v <= 14 ? 15 : Math.round(3 + v / 30);
+  }
+  function stopTimer(){ clearInterval(timer); timer = null; $('cancelBtn').hidden = true; }
+  function cancelRun(){ if (!running) return; if (worker) { worker.terminate(); worker = null; } running = false; stopTimer(); $('runBtn').disabled = false; prog('已取消', 0); }
   function run(){
     if (!table || running) return;
     const task = currentTask(); let cfg; try { cfg = readCfg(); } catch(e) { showErr('設定讀取失敗：' + e.message); return; }
     if (task === 'opt' && cfg.weight === -1) cfg.weight = -1;
     hideErr(); running = true; $('runBtn').disabled = true; prog('開始計算…', 3);
+    const est = estimate(task, cfg); t0run = Date.now(); $('cancelBtn').hidden = false; $('estMsg').textContent = '預計約 ' + est + ' 秒（依電腦速度不同）';
+    timer = setInterval(() => { $('estMsg').textContent = '已經過 ' + Math.round((Date.now() - t0run) / 1000) + ' 秒，預計約 ' + est + ' 秒（依電腦速度不同）'; }, 1000);
     const finish = (res, err) => {
-      running = false; $('runBtn').disabled = false;
+      if (!running) return;
+      running = false; $('runBtn').disabled = false; stopTimer(); $('estMsg').textContent = '用了 ' + Math.round((Date.now() - t0run) / 1000) + ' 秒';
       if (err) { showErr(err); prog('沒有完成', 0); return; }
       prog('完成', 100); lastResult = res; renderReport(res);
     };
@@ -1669,6 +1686,7 @@ self.onmessage = function(ev){
       html += '<div class="panel"><h3>平衡準確率（5 折交叉驗證 × ' + res.repeats + ' 次，越高越好）</h3>' + bars(res.models.map(m => ({ name: m.name, kind: m.kind, v: m.mean, sub: '± ' + (m.sd * 100).toFixed(1) + ' 個百分點' })), true, x => (x * 100).toFixed(1) + '%') + '</div>';
       html += '<div class="panel"><h3>量子核函數的頻寬掃描</h3><p class="small muted">頻寬越大，資料點在量子空間裡越「互不相似」；標準差掉到接近 0 就是核函數集中，模型會學不到東西。</p><div class="tbl"><table><thead><tr><th>頻寬</th><th>平均相似度</th><th>相似度標準差</th></tr></thead><tbody>' + res.concentration.map(c => '<tr><td class="mono">' + c.lam + '</td><td class="mono">' + c.mean.toFixed(3) + '</td><td class="mono">' + c.sd.toFixed(3) + '</td></tr>').join('') + '</tbody></table></div></div>';
     } else {
+      html += '<p class="hint">這個模組還是實驗性的：校正實驗中，即使資料本身由量子線路產生，量子生成模型也沒有贏過古典模型，因為訓練會卡在局部最小值。所以它目前只能幫你確認「古典就夠了」，還不能偵測量子的好處。</p>';
       html += '<div class="meta-row"><span>' + res.nb + ' 個是／否欄位</span><span>訓練 ' + res.nTrain + ' 筆、測試 ' + res.nTest + ' 筆</span></div>';
       html += '<div class="panel"><h3>沒看過的測試資料：每筆平均要幾 bits 描述（越低越好）</h3>' + bars(res.models.map(m => ({ name: m.name, kind: m.kind, v: m.test, sub: '± ' + m.testSd.toFixed(3) + '（' + res.seeds + ' 次不同切分）；訓練 ' + m.train.toFixed(3) + '；參數 ' + m.params })), false, x => x.toFixed(3)) + '</div>';
       html += '<div class="panel"><h3>使用的欄位</h3><p class="small">' + res.bits.map(b => esc(b.name) + '（' + esc(b.desc) + '）').join('、') + '</p></div>';
@@ -1703,8 +1721,20 @@ self.onmessage = function(ev){
   document.querySelectorAll('[data-sample]').forEach(b => b.addEventListener('click', () => { const s = SAMPLE[b.dataset.sample]; if (setData(s[1](), s[0])) { setTask(s[2]); if (b.dataset.sample === 'paint') $('suggest').textContent = '噴漆換色已轉成等價的 Ising 形式：每款車一個變數（先紅或先藍），強度是相鄰車身的關係。跨組強度越大，換色次數越少。'; run(); } }));
   document.querySelectorAll('input[name=task]').forEach(r => r.addEventListener('change', renderCfg));
   $('runBtn').addEventListener('click', run);
+  $('cancelBtn').addEventListener('click', cancelRun);
   $('usePaste').addEventListener('click', () => setData($('paste').value, '貼上的資料'));
-  const readFile = f => { if (!f) return; if (f.size > 15e6) { showErr('檔案超過 15 MB，請先抽樣成小檔再上傳。'); return; } const fr = new FileReader(); fr.onload = () => setData(fr.result, f.name); fr.onerror = () => showErr('讀檔失敗，請再試一次。'); fr.readAsText(f); };
+  // Excel on Traditional-Chinese Windows saves "CSV" as Big5; detect UTF-8 / UTF-16 / Big5 instead of assuming UTF-8
+  function decodeBytes(buf){
+    const b = new Uint8Array(buf);
+    if (b[0] === 0xFF && b[1] === 0xFE) return { text: new TextDecoder('utf-16le').decode(buf), enc: 'UTF-16' };
+    if (b[0] === 0xFE && b[1] === 0xFF) return { text: new TextDecoder('utf-16be').decode(buf), enc: 'UTF-16' };
+    try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(buf), enc: 'UTF-8' }; } catch (e) {}
+    try { return { text: new TextDecoder('big5').decode(buf), enc: 'Big5' }; } catch (e) {}
+    return { text: new TextDecoder('utf-8').decode(buf), enc: '未知' };
+  }
+  const readFile = f => { if (!f) return; if (f.size > 15e6) { showErr('檔案超過 15 MB，請先抽樣成小檔再上傳。'); return; } const fr = new FileReader();
+    fr.onload = () => { const d = decodeBytes(fr.result); if (setData(d.text, f.name) && d.enc !== 'UTF-8') $('dataInfo').textContent += '。偵測到 ' + d.enc + ' 編碼，已自動轉換；若中文仍是亂碼，請在 Excel 另存為「CSV UTF-8」。'; };
+    fr.onerror = () => showErr('讀檔失敗，請再試一次。'); fr.readAsArrayBuffer(f); };
   $('file').addEventListener('change', e => readFile(e.target.files[0]));
   const drop = $('drop');
   ['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));

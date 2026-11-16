@@ -3,7 +3,7 @@
 企業放一小份 CSV，系統在同一份資料上讓量子方法和強的古典方法正面比，用統計檢定判斷輸贏，給紅／黃／綠燈；古典贏的時候，推薦該用哪個古典方法和現成工具。
 
 - **網頁版**：https://johnny-0120.github.io/quantum-fit-check/ （`index.html` 單一檔案，全部在瀏覽器內計算，資料不上傳；下載後直接用瀏覽器打開也可以）。
-- **Colab／Python 版**：`colab/qfc_colab.py`（腳本）與 `colab/量子適用性健檢_Colab.ipynb`（筆記本），可跑更大的資料。
+- **Colab／Python 版**：`colab/qfc_colab.py`（腳本）與 `colab/quantum_fit_check_colab.ipynb`（筆記本），可跑更大的資料。
 
 ## 能檢查的問題
 
