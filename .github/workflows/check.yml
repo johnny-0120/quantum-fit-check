@@ -1,0 +1,20 @@
+name: check
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install numpy scipy pandas
+      - name: Engine correctness (formulas, gradients, QUBO, t distribution)
+        run: node tests/verify.js
+      - name: JS (web) and Python (Colab) give the same results
+        run: python tests/crosscheck.py
+      - name: index.html is rebuilt from template.html + engine.js
+        run: node build.js && git diff --exit-code index.html
+      - name: Notebook is rebuilt from qfc_colab.py
+        run: python colab/build_notebook.py && git diff --exit-code colab/quantum_fit_check_colab.ipynb

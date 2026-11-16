@@ -43,8 +43,11 @@
 
 ## 開發
 
+網頁版（`engine.js`）和 Colab 版（`colab/qfc_colab.py`）是同一套演算法的兩份實作。改了其中一邊，請同步改另一邊；GitHub Actions 每次推送都會自動跑下列檢查，兩邊結果不一致就會失敗。
+
 ```bash
 node tests/verify.js      # 公式、梯度、QUBO 轉換、t 分布檢查
+python tests/crosscheck.py   # 網頁版（JS）和 Colab 版（Python）在同一份範例上的結果是否一致
 node tests/calibrate.js   # 校正實驗（約 3 分鐘）
 node build.js             # template.html + engine.js → index.html
 python colab/build_notebook.py   # qfc_colab.py → .ipynb
