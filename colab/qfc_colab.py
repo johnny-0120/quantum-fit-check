@@ -37,17 +37,30 @@ print(df.shape); df.head()
 
 # %%
 def build_graph(df):
+    if SRC is None and DST is None and df.shape[0] == df.shape[1] and df.shape[0] >= 3:
+        try:
+            M = df.values.astype(float)
+            if np.isfinite(M).all():
+                n = M.shape[0]
+                E = [(i, j, 0.5 * (M[i, j] + M[j, i])) for i in range(n) for j in range(i + 1, n) if M[i, j] + M[j, i] != 0]
+                return n, np.array(E, float) if E else np.empty((0, 3), float)
+        except (TypeError, ValueError):
+            pass
     s, d = SRC or df.columns[0], DST or df.columns[1]
     w = WEIGHT or (df.columns[2] if df.shape[1] >= 3 else None)
-    labels = pd.Index(pd.unique(pd.concat([df[s].astype(str), df[d].astype(str)])))
-    a, b = labels.get_indexer(df[s].astype(str)), labels.get_indexer(df[d].astype(str))
-    ww = df[w].astype(float).values if w else np.ones(len(df))
-    E = {}
-    for i, j, x in zip(a, b, ww):
-        if i == j or x == 0: continue
-        k = (min(i, j), max(i, j)); E[k] = E.get(k, 0) + x
-    edges = np.array([(i, j, x) for (i, j), x in E.items() if x != 0], float)
-    return len(labels), edges
+    E, names, idx = {}, [], {}
+    def gid(x):
+        if x not in idx: idx[x] = len(names); names.append(x)
+        return idx[x]
+    sa, sb = df[s].astype(str), df[d].astype(str)
+    ww = pd.to_numeric(df[w], errors='coerce').values if w else np.ones(len(df))
+    for a, b, x in zip(sa, sb, ww):
+        a, b = a.strip(), b.strip()
+        if not a or not b or a == b or not np.isfinite(x) or x == 0: continue
+        i, j = gid(a), gid(b)
+        k = (min(i, j), max(i, j)); E[k] = E.get(k, 0) + float(x)
+    edges = np.array([(i, j, x) for (i, j), x in E.items() if x != 0], float) if E else np.empty((0, 3), float)
+    return len(names), edges
 
 def build_qubo(df):
     """0/1 problem → Ising with one reference spin. Spec table rows: kind,a,b,value[,penalty]
@@ -63,22 +76,33 @@ def build_qubo(df):
         if i != j: k = (min(i, j), max(i, j)); M[k] = M.get(k, 0) + v
     if 'kind' in cols:
         for _, r in d.iterrows():
-            kind = str(r['kind']).strip().lower(); a = r.get('a'); b = r.get('b'); v = float(r['value']) if 'value' in cols and pd.notna(r.get('value')) else 0.0
-            if kind in ('linear', 'cost'): i = vid(a); lin[i] = lin.get(i, 0) + v; olin[i] = olin.get(i, 0) + v
-            elif kind in ('pair', 'conflict'): i, j = vid(a), vid(b); addp(pairs, i, j, v); addp(opairs, i, j, v)
-            elif kind == 'member': groups.setdefault(a, {'k': 1, 'm': [], 'p': None})['m'].append(vid(b))
-            elif kind in ('choose', 'exactly'):
-                g = groups.setdefault(a, {'k': 1, 'm': [], 'p': None}); g['k'] = int(float(b)) if pd.notna(b) and str(b) != '' else 1
-                if 'penalty' in cols and pd.notna(r.get('penalty')) and str(r.get('penalty')) != '': g['p'] = float(r['penalty'])
+            kind = str(r['kind']).strip().lower()
+            a = '' if pd.isna(r.get('a')) else str(r.get('a')).strip()
+            b = '' if pd.isna(r.get('b')) else str(r.get('b')).strip()
+            raw_v = r.get('value') if 'value' in cols else None
+            v = float(raw_v) if raw_v is not None and pd.notna(raw_v) and str(raw_v).strip() != '' else 0.0
+            if kind in ('linear', 'cost') and a: i = vid(a); lin[i] = lin.get(i, 0) + v; olin[i] = olin.get(i, 0) + v
+            elif kind in ('pair', 'conflict') and a and b:
+                i, j = vid(a), vid(b)
+                if i == j: lin[i] = lin.get(i, 0) + v; olin[i] = olin.get(i, 0) + v
+                else: addp(pairs, i, j, v); addp(opairs, i, j, v)
+            elif kind == 'member' and a and b: groups.setdefault(a, {'k': 1, 'm': [], 'p': None})['m'].append(vid(b))
+            elif kind in ('choose', 'exactly') and a:
+                g = groups.setdefault(a, {'k': 1, 'm': [], 'p': None}); g['k'] = int(float(b)) if b != '' else 1
+                if 'penalty' in cols and pd.notna(r.get('penalty')) and str(r.get('penalty')).strip() != '': g['p'] = float(r['penalty'])
     else:  # square QUBO matrix
         M = df.values.astype(float); names = [str(c) for c in df.columns]
+        if M.shape[0] != M.shape[1]: raise ValueError('QUBO 矩陣必須是方陣（列數 = 欄數）。')
         for i in range(len(names)):
             lin[i] = olin[i] = M[i, i]
             for j in range(i + 1, len(names)):
                 if M[i, j] + M[j, i]: pairs[(i, j)] = opairs[(i, j)] = M[i, j] + M[j, i]
-    nv = len(names); sens = max(abs(olin.get(i, 0)) + sum(abs(v) for (a, b), v in opairs.items() if i in (a, b)) for i in range(nv))
+    nv = len(names)
+    if nv < 2: raise ValueError('規格表至少要有 2 個變數。')
+    sens = max(abs(olin.get(i, 0)) + sum(abs(v) for (a, b), v in opairs.items() if i in (a, b)) for i in range(nv))
     c0 = 0.0
     for g in groups.values():
+        g['m'] = list(dict.fromkeys(g['m']))
         P = g['p'] if g['p'] is not None else max(1.0, 2 * sens); g['p'] = P; k = g['k']
         for i in g['m']: lin[i] = lin.get(i, 0) + P * (1 - 2 * k)
         for x, y in itertools.combinations(g['m'], 2): addp(pairs, x, y, 2 * P)
@@ -87,7 +111,8 @@ def build_qubo(df):
     for i, a in lin.items(): cst += a / 2; h[i] -= a / 2
     for (i, j), b in pairs.items(): cst += b / 4; h[i] -= b / 4; h[j] -= b / 4; J[(i, j)] = J.get((i, j), 0) + b / 4
     E = [(i, j, v) for (i, j), v in J.items() if abs(v) > 1e-12] + [(i, nv, h[i]) for i in range(nv) if abs(h[i]) > 1e-12]
-    edges = np.array(E, float); meta = {'nv': nv, 'names': names, 'const': cst, 'sumW': float(edges[:, 2].sum()), 'olin': olin, 'opairs': opairs, 'groups': groups}
+    edges = np.array(E, float) if E else np.empty((0, 3), float)
+    meta = {'nv': nv, 'names': names, 'const': cst, 'sumW': float(edges[:, 2].sum()) if len(edges) else 0.0, 'olin': olin, 'opairs': opairs, 'groups': groups}
     return nv + 1, edges, meta
 
 def decode_qubo(meta, z):
@@ -184,14 +209,35 @@ def rqaoa(n, edges, ncut=8):
             if abs(nv) < 1e-12: adj[v].pop(w, None); adj[w].pop(v, None)
             else: adj[v][w] = nv; adj[w][v] = nv
         adj[u].clear(); active.discard(u); stack.append((u, v, s))
-    rest = sorted(active); bestE, bz = np.inf, None
-    for bits in itertools.product([1, -1], repeat=len(rest)):
-        zz = dict(zip(rest, bits)); e = sum(J * zz[a] * zz[w] for a in rest for w, J in adj[a].items() if w in zz and w > a)
-        if e < bestE: bestE, bz = e, zz
+    rest = [v for v in sorted(active) if adj[v]]
     z = np.ones(n, int)
-    for a, s_ in bz.items(): z[a] = s_
+    if 0 < len(rest) <= 20:
+        bestE, bz = np.inf, None
+        for bits in itertools.product([1, -1], repeat=len(rest)):
+            zz = dict(zip(rest, bits)); e = sum(J * zz[a] * zz[w] for a in rest for w, J in adj[a].items() if w in zz and w > a)
+            if e < bestE: bestE, bz = e, zz
+        for a, s_ in bz.items(): z[a] = s_
+    elif len(rest) > 20:
+        pos = {v: i for i, v in enumerate(rest)}
+        subA = [[(pos[w], J) for w, J in adj[v].items() if w in pos] for v in rest]
+        subZ = local_search(len(rest), subA, np.ones(len(rest), int))
+        for i, v in enumerate(rest): z[v] = int(subZ[i])
     for u, v, s in reversed(stack): z[u] = s * z[v]
     return z
+
+def z_of(idx, n):
+    return np.array([1 - 2 * ((int(idx) >> q) & 1) for q in range(n)], int)
+
+def _warm_state(warm):
+    psi = np.ones(1, complex)
+    for q in range(len(warm)):
+        psi = np.kron(np.array([math.cos(warm[q] / 2), math.sin(warm[q] / 2)]), psi)
+    return psi
+
+def _cvar_val(pr, C, order, cvar):
+    acc = np.cumsum(pr[order]); m = acc < cvar; tail = pr[order] * m
+    k = int(np.searchsorted(acc, cvar, side='left')); extra = max(0.0, cvar - (float(acc[k - 1]) if k > 0 else 0.0))
+    return float((tail @ C[order] + extra * C[order][min(k, len(C) - 1)]) / cvar)
 
 def qaoa_sv(n, edges, p=1, cvar=None, warm=None, shots=1024):
     sc = np.max(np.abs(edges[:, 2])); x = np.arange(2 ** n)
@@ -201,10 +247,7 @@ def qaoa_sv(n, edges, p=1, cvar=None, warm=None, shots=1024):
     order = np.argsort(C)
     def run(par):
         g, b = par[:p], par[p:]
-        if warm is None: psi = np.full(2 ** n, 2 ** (-n / 2), complex)
-        else:
-            psi = np.ones(1, complex)
-            for q in reversed(range(n)): psi = np.kron(np.array([math.cos(warm[q] / 2), math.sin(warm[q] / 2)]), psi)
+        psi = np.full(2 ** n, 2 ** (-n / 2), complex) if warm is None else _warm_state(warm)
         for l in range(p):
             psi = psi * np.exp(-1j * g[l] * C)
             for q in range(n):
@@ -216,14 +259,16 @@ def qaoa_sv(n, edges, p=1, cvar=None, warm=None, shots=1024):
         return np.abs(psi) ** 2
     def obj(par):
         pr = run(par)
-        if cvar is None: return float(pr @ C)
-        acc = np.cumsum(pr[order]); m = acc <= cvar; tail = pr[order] * m
-        k = np.searchsorted(acc, cvar); extra = cvar - (acc[k - 1] if k > 0 else 0)
-        return float((tail @ C[order] + extra * C[order][min(k, len(C) - 1)]) / cvar)
+        return float(pr @ C) if cvar is None else _cvar_val(pr, C, order, cvar)
     grid = [np.r_[[g * (l + 1) / p for l in range(p)], [b * (p - l) / p for l in range(p)]] for g in np.linspace(0.25, 2.9, 10) for b in np.linspace(0.15, 1.4, 8)]
     x0 = min(grid, key=obj); res = minimize(obj, x0, method='Nelder-Mead', options={'maxiter': 80 + 40 * p})
-    pr = run(res.x)  # optimisation is deterministic; repeat only the measurement
-    return [float(K[rng.choice(2 ** n, size=shots, p=pr / pr.sum())].max()) for _ in range(SEEDS)], float(pr @ K)
+    pr = run(res.x); prob = pr / pr.sum()  # optimisation is deterministic; repeat only the measurement
+    vals, best_i = [], None
+    for _ in range(SEEDS):
+        samp = rng.choice(2 ** n, size=shots, p=prob)
+        j = int(samp[np.argmax(K[samp])]); vals.append(float(K[j]))
+        if best_i is None or K[j] > K[best_i]: best_i = j
+    return vals, z_of(best_i, n), float(pr @ K)
 
 def gw_mixing(n, A, edges, rounds=64):  # Goemans–Williamson SDP via low-rank mixing method + hyperplane rounding
     k = min(12, max(2, math.ceil(math.sqrt(2 * n)))); V = rng.standard_normal((n, k)); V /= np.linalg.norm(V, axis=1, keepdims=True)
@@ -259,7 +304,13 @@ def anneal(n, edges, shots=1024):  # simulated quantum annealing, H(s) = -(1-s)�
         Kst = min(120, max(10, 4 * T)); dt = T / Kst; s = (np.arange(Kst) + 0.5) / Kst
         pr = evolve(n, C, dt * s, -dt * (1 - s)); e = pr @ C
         if best is None or e < best[0]: best = (e, pr)
-    pr = best[1]; return [float(K[rng.choice(2 ** n, size=shots, p=pr / pr.sum())].max()) for _ in range(SEEDS)]
+    prob = best[1] / best[1].sum()
+    vals, best_i = [], None
+    for _ in range(SEEDS):
+        samp = rng.choice(2 ** n, size=shots, p=prob)
+        j = int(samp[np.argmax(K[samp])]); vals.append(float(K[j]))
+        if best_i is None or K[j] > K[best_i]: best_i = j
+    return vals, z_of(best_i, n)
 
 def he_probs(n, th, L):  # real-amplitude hardware-efficient circuit: RY layer + L × (CZ chain + RY layer)
     x = np.arange(2 ** n); cz = np.ones(2 ** n)
@@ -284,17 +335,19 @@ def train_he(n, L, dLdp, steps, lr=0.05):  # Adam + exact parameter-shift gradie
     return he_probs(n, th, L), P
 
 def grover_adaptive(K):  # Dürr–Høyer / Gilliam et al. threshold search with exact amplification statistics
-    N = len(K); srt = np.sort(K); y = K[rng.integers(N)]; calls = 0; m = 1.0; since = 0; cap = math.sqrt(N)
+    N = len(K); ord_idx = np.argsort(K); srt = K[ord_idx]; yi = int(rng.integers(N)); y = K[yi]; calls = 0; m = 1.0; since = 0; cap = math.sqrt(N)
     while since < 4 * cap + 8:
         M = N - np.searchsorted(srt, y + 1e-9, side='right'); k = int(rng.integers(max(1, int(m)))); calls += k
         ps = math.sin((2 * k + 1) * math.asin(math.sqrt(M / N))) ** 2 if M else 0
-        if rng.random() < ps: y = srt[N - M + rng.integers(M)]; m = 1; since = 0
+        if rng.random() < ps: j = N - M + int(rng.integers(M)); yi = int(ord_idx[j]); y = srt[j]; m = 1; since = 0
         else: since += k + 1; m = min(m * 1.2, cap)
-    return float(y), calls
+    return float(y), calls, yi
 
-def recommend_opt(n, edges, res):
-    A = adj_lists(n, edges); col = {}; bip = True
+def recommend_opt(n, edges, res, nd=None, is_qubo=False):
+    nd = n if nd is None else nd
+    A = adj_lists(n, edges); col = {}; bip = not is_qubo
     for s in range(n):
+        if not bip: break
         if s in col: continue
         col[s] = 1; st = [s]
         while st and bip:
@@ -304,7 +357,7 @@ def recommend_opt(n, edges, res):
                 elif col[v_] == col[u]: bip = False
     pos = (edges[:, 2] > 0).all(); cl = res[res.類型 == 'classical']; top = cl[cl.最好答案 >= cl.最好答案.max() - 1e-9].sort_values('秒').iloc[0]
     if bip and pos: return '二分圖兩色著色（廣度優先搜尋）：一步得到保證最佳解。工具：networkx nx.bipartite.color'
-    if n <= 25: return f'精確求解：只有 {n} 個變數，用 Google OR-Tools CP-SAT 或 Gurobi 可保證最佳（「{top.方法}」{top.秒:.3f} 秒已找到最好答案）。'
+    if nd <= 25: return f'精確求解：只有 {nd} 個變數，用 Google OR-Tools CP-SAT 或 Gurobi 可保證最佳（「{top.方法}」{top.秒:.3f} 秒已找到最好答案）。'
     return (f'建議用「{top.方法}」（最快拿到最好答案，{top.秒:.3f} 秒）。其他選擇：禁忌搜尋／模擬退火多起點平行；'
             '要品質保證用 OR-Tools 或 Gurobi 整數規劃設時間上限（看 MIP gap）' + ('；GW 半定規劃保證 ≥ 87.8% 最佳（cvxpy）' if pos else '') + '。')
 
@@ -312,14 +365,21 @@ def analyze_opt(df):
     meta = None
     if 'kind' in [c.lower() for c in df.columns] or QUBO_MATRIX: n, edges, meta = build_qubo(df)
     else: n, edges = build_graph(df)
+    if n < 3 or len(edges) == 0: raise ValueError('關係網路至少需要 3 個節點和 1 條關係。')
     A = adj_lists(n, edges); out = []; nd = meta['nv'] if meta else n
-    def run(name, kind, fn, reps=SEEDS):  # fn returns z (array) or list of values; every random method is run `reps` times
+    def run(name, kind, fn, reps=SEEDS, denom=None):  # fn returns z (array), list of values, or (vals, best_z)
         vals, zs, t0 = [], [], time.time()
         for _ in range(reps):
             o = fn()
+            if isinstance(o, tuple):
+                vals += o[0]
+                if o[1] is not None: zs.append(o[1])
+                break
             if isinstance(o, list): vals += o; break
             vals.append(cut(edges, o)); zs.append(o)
-        z = zs[int(np.argmax(vals))] if zs else None; row = {'方法': name, '類型': kind, '最好答案': max(vals), '平均': float(np.mean(vals)), '次數': len(vals), '每次秒數': (time.time() - t0) / max(1, len(zs) or 1)}
+        dt = time.time() - t0
+        z = zs[int(np.argmax(vals))] if len(zs) == len(vals) and zs else (zs[0] if zs else None)
+        row = {'方法': name, '類型': kind, '最好答案': max(vals), '平均': float(np.mean(vals)), '次數': len(vals), '每次秒數': dt / (denom or max(1, len(zs) or 1))}
         if meta is not None:
             row['成本（越低越好）'] = meta['const'] + meta['sumW'] - 2 * max(vals)
             if z is not None: obj, viol, chosen = decode_qubo(meta, z); row['滿足限制'] = not viol; row['選了'] = '、'.join(chosen[:12])
@@ -334,17 +394,30 @@ def analyze_opt(df):
     if n <= MAX_SV_QUBITS:
         for name, kw in [('QAOA p=1', {}), ('QAOA p=2', {'p': 2}), ('CVaR-QAOA α=0.1', {'cvar': 0.1}),
                          ('Warm-start QAOA', {'warm': [2 * math.asin(math.sqrt(0.25 if s > 0 else 0.75)) for s in greedy]})]:
-            run(name, 'quantum', lambda: qaoa_sv(n, edges, **kw)[0], 1)
+            run(name, 'quantum', lambda kw=kw: qaoa_sv(n, edges, **kw)[:2], 1)
         run('量子退火（模擬）', 'quantum', lambda: anneal(n, edges), 1)
-        K = sv_arrays(n, edges)[1]; run('Grover 適應性搜尋', 'quantum', lambda: [grover_adaptive(K)[0] for _ in range(SEEDS)], 1)
+        K = sv_arrays(n, edges)[1]
+        def run_grover():
+            runs = [grover_adaptive(K) for _ in range(SEEDS)]
+            bi = max(runs, key=lambda r_: r_[0])[2]
+            return [r_[0] for r_ in runs], z_of(bi, n)
+        run('Grover 適應性搜尋', 'quantum', run_grover, 1, denom=SEEDS)
     if n <= 12:
         C, K = sv_arrays(n, edges)
-        run('VQE（硬體高效線路）', 'quantum', lambda: [float(K[rng.choice(2 ** n, size=1024, p=(lambda pr: pr / pr.sum())(train_he(n, 2, lambda p: C, 40, 0.08)[0]))].max()) for _ in range(SEEDS)], 1)
+        def run_vqe():
+            vals, best_i = [], None
+            for _ in range(SEEDS):
+                pr, _ = train_he(n, 2, lambda p: C, 40, 0.08)
+                samp = rng.choice(2 ** n, size=1024, p=pr / pr.sum())
+                j = int(samp[np.argmax(K[samp])]); vals.append(float(K[j]))
+                if best_i is None or K[j] > K[best_i]: best_i = j
+            return vals, z_of(best_i, n)
+        run('VQE（硬體高效線路）', 'quantum', run_vqe, 1, denom=SEEDS)
     res = pd.DataFrame(out)
     bc, bq = res[res.類型 == 'classical'].最好答案.max(), res[res.類型 == 'quantum'].最好答案.max()
     lv = '紅燈：古典較好' if bq < bc - 1e-9 else ('紅燈：規模小，古典窮舉即保證最佳' if nd <= 20 else ('綠燈：量子找到更好的解，請把古典時間預算加大再比' if bq > bc + 1e-9 else '黃燈：量子追平最強古典（非優勢）'))
     print(f'{nd} 個決策變數、{len(edges)} 條關係、隨機方法各跑 {SEEDS} 次 → {lv}')
-    rec = recommend_opt(n, edges, res.rename(columns={'每次秒數': '秒'}))
+    rec = recommend_opt(n, edges, res.rename(columns={'每次秒數': '秒'}), nd=nd, is_qubo=(meta is not None))
     if meta is not None and meta['groups']: rec += ' 有限制條件時，整數規劃（OR-Tools CP-SAT）可直接處理限制，不需要懲罰項。'
     print('建議：' + rec); print('量子方法的時間是模擬時間，不代表量子硬體的速度。'); return res
 
@@ -368,11 +441,20 @@ def qiskit_check():
 # %%
 def prep_cls(df):
     lab = LABEL or next((c for c in df.columns if c.lower() in ('label', 'class', 'target', 'y', 'is_bot', 'fraud', 'churn')), df.columns[-1])
-    y_raw = df[lab].astype(str); X = df.drop(columns=[lab])
+    d = df[df[lab].notna() & (df[lab].astype(str).str.strip() != '')]
+    if len(d) < 10: raise ValueError(f'有效樣本太少（目前 {len(d)} 筆），5 折交叉驗證至少需要 10 筆資料。')
+    y_raw = d[lab].astype(str); X = d.drop(columns=[lab])
     num = X.select_dtypes('number'); cat = X.select_dtypes(exclude='number'); cat = cat[[c for c in cat if cat[c].nunique() <= 10]]
-    X = pd.concat([num.fillna(num.mean()), pd.get_dummies(cat, dtype=float)], axis=1).values.astype(float)
+    X = pd.concat([num.fillna(num.mean()).fillna(0.0), pd.get_dummies(cat, dtype=float)], axis=1).values.astype(float)
+    if X.shape[1] == 0: raise ValueError('找不到可用的特徵欄位。')
     classes = sorted(y_raw.unique()); y = y_raw.map({c: i for i, c in enumerate(classes)}).values
-    if len(y) > CLS_MAX_N: idx = rng.choice(len(y), CLS_MAX_N, replace=False); X, y = X[idx], y[idx]
+    if len(classes) < 2: raise ValueError('預測目標欄只有一種值，無法做分類。')
+    if len(y) > CLS_MAX_N:
+        keep = []
+        for c in range(len(classes)):
+            arr = rng.permutation(np.where(y == c)[0]); k = min(len(arr), max(5, round(CLS_MAX_N * len(arr) / len(y))))
+            keep.append(arr[:k])
+        idx = rng.permutation(np.concatenate(keep))[:CLS_MAX_N]; X, y = X[idx], y[idx]
     X = (X - X.mean(0)) / (X.std(0) + 1e-12); return X, y, classes
 
 def zz_states(Z, lam):
@@ -420,7 +502,8 @@ def projected_features(psi, q):  # <X>,<Y>,<Z> of every qubit (Huang et al. 2021
 
 def alignment(K, y, idx):  # centred kernel–target alignment (Cortes et al. 2012), training rows only
     Kt = K[np.ix_(idx, idx)]; Y = (y[idx][:, None] == y[idx][None, :]).astype(float); H = np.eye(len(idx)) - 1 / len(idx)
-    Kc, Yc = H @ Kt @ H, H @ Y @ H; return float((Kc * Yc).sum() / np.sqrt((Kc * Kc).sum() * (Yc * Yc).sum()))
+    Kc, Yc = H @ Kt @ H, H @ Y @ H; denom = np.sqrt((Kc * Kc).sum() * (Yc * Yc).sum())
+    return float((Kc * Yc).sum() / denom) if denom > 0 else 0.0
 
 def vqc_cv(psis, y, folds, q, L=2, steps=150, batch=32, lr=0.08):  # psis: {bandwidth: (states, ZZ kernel)}  # variational quantum classifier, logits = w·<Z_c> + b
     nc = y.max() + 1
@@ -476,7 +559,8 @@ def analyze_cls(df):
     from sklearn.linear_model import LogisticRegression; from sklearn.ensemble import RandomForestClassifier
     from sklearn.neural_network import MLPClassifier; from sklearn.neighbors import KNeighborsClassifier
     X, y, classes = prep_cls(df); q = min(CLS_QUBITS, X.shape[1]); foldsets = [make_folds(y) for _ in range(REPEATS)]
-    w, V = eigh(np.cov(X.T)); Z = X @ V[:, ::-1][:, :q]; Z = (Z - Z.mean(0)) / (Z.std(0) + 1e-12)
+    if X.shape[1] <= q: Z = X.copy()
+    else: w, V = eigh(np.atleast_2d(np.cov(X.T))); Z = X @ V[:, ::-1][:, :q]; Z = (Z - Z.mean(0)) / (Z.std(0) + 1e-12)
     D = lambda M: ((M[:, None, :] - M[None, :, :]) ** 2).sum(-1)
     Df, Dz = D(X), D(Z); rows = []
     def add(name, kind, fn):
@@ -510,6 +594,13 @@ def analyze_cls(df):
 # ## 分布學習：IQP 量子生成模型 vs 古典
 
 # %%
+def fwht(a):
+    x = np.array(a, copy=True); N = len(x); h = 1
+    while h < N:
+        x = x.reshape(-1, 2, h); u, v = x[:, 0, :].copy(), x[:, 1, :].copy()
+        x[:, 0, :] = u + v; x[:, 1, :] = u - v; x = x.reshape(N); h <<= 1
+    return x / math.sqrt(N)
+
 def analyze_gen(df):
     B = []
     for c in df.columns:
@@ -517,16 +608,21 @@ def analyze_gen(df):
         if v.nunique() == 2: b = (v == sorted(v.dropna().unique())[1]).astype(int)   # same rule as the web version
         elif v.dtype.kind in 'if': b = (v > v.median()).astype(int)
         else: b = (v == v.mode()[0]).astype(int)
-        p = b.mean()
-        if 0.02 < p < 0.98: B.append(b.values)
-    B = np.array(B[:GEN_MAX_BITS]).T; nb = B.shape[1]; N = 2 ** nb
+        p = float(b.mean())
+        if 0.02 < p < 0.98:
+            ent = -(p * math.log2(p) + (1 - p) * math.log2(1 - p))
+            if ent > 0.05: B.append((ent, b.values))
+    B.sort(key=lambda t: t[0], reverse=True)
+    B = np.array([b for _, b in B[:GEN_MAX_BITS]]).T
+    if B.ndim != 2 or B.shape[1] < 3: raise ValueError('至少需要 3 個有變化的欄位才能做分布學習。')
+    nb = B.shape[1]; N = 2 ** nb
     x = (B * (1 << np.arange(nb))).sum(1)
+    nte = max(10, len(x) * 3 // 10)
+    if len(x) - nte < 20: raise ValueError('資料太少：至少需要約 30 筆。')
     nll = lambda p, d: float(-np.mean(np.log2(np.maximum(p[d], 1e-12))))
     allx = np.arange(N); bits = (allx[:, None] >> np.arange(nb)) & 1
     terms = [(i,) for i in range(nb)] + list(itertools.combinations(range(nb), 2))
     F = np.array([np.prod(1 - 2 * bits[:, list(t)], 1) for t in terms]).astype(float)
-    H = np.array([[1]])
-    for _ in range(nb): H = np.kron(H, np.array([[1, 1], [1, -1]]) / math.sqrt(2))
     def models(tr):  # every model is fitted on the training rows only; returns [(name, kind, p over all 2^nb patterns)]
         out = []; inner, val = tr[: int(len(tr) * .8)], tr[int(len(tr) * .8):]
         pi = ((tr[:, None] >> np.arange(nb)) & 1).mean(0) * len(tr) / (len(tr) + 2) + 1 / (len(tr) + 2)
@@ -554,21 +650,28 @@ def analyze_gen(df):
                 Nk = R.sum(0); pk = (Nk + 1) / (len(d) + K); mu = (R.T @ db + 1) / (Nk[:, None] + 2)
             return np.exp(np.log(pk) + bits @ np.log(mu).T + (1 - bits) @ np.log(1 - mu).T).sum(1)
         Kb = min((2, 4, 8), key=lambda K: nll(bern_mix(inner, K), val)); out.append(('伯努利混合模型', 'classical', bern_mix(tr, Kb)))
-        c = np.bincount(tr, minlength=N) / len(tr); probs = lambda th: np.abs(H @ (np.exp(1j * (th @ F)) / math.sqrt(N))) ** 2
-        best_th = None
-        for sig in (0.05, 0.4, 0.8, 1.2):  # random restarts; keep lowest training loss
+        probs = lambda th: np.abs(fwht(np.exp(1j * (th @ F)) / math.sqrt(N))) ** 2
+        def fit_iqp(d, sig):
+            cd = np.bincount(d, minlength=N) / len(d)
             th = sig * rng.standard_normal(len(terms)); m = np.zeros_like(th); v2 = np.zeros_like(th)
+            best_loss, best_th = np.inf, th.copy()
             for st in range(800):
-                vv = np.exp(1j * (th @ F)) / math.sqrt(N); a = H @ vv; pr = np.abs(a) ** 2
-                bvec = c * a.conj() / np.maximum(pr, 1e-15); h = H @ bvec; g = 2 * (F @ np.imag(vv * h))
+                vv = np.exp(1j * (th @ F)) / math.sqrt(N); a = fwht(vv); pr = np.abs(a) ** 2
+                nz = cd > 0; loss = float(-np.sum(cd[nz] * np.log(np.maximum(pr[nz], 1e-15))))
+                if loss < best_loss: best_loss, best_th = loss, th.copy()
+                bvec = np.where(nz, cd * a.conj() / np.maximum(pr, 1e-15), 0.0); h = fwht(bvec); g = 2 * (F @ np.imag(vv * h))
                 m = .9 * m + .1 * g; v2 = .999 * v2 + .001 * g * g; th -= 0.05 * (m / (1 - .9 ** (st + 1))) / (np.sqrt(v2 / (1 - .999 ** (st + 1))) + 1e-8)
-            if best_th is None or nll(probs(th), tr) < nll(probs(best_th), tr): best_th = th
-        out.append((f'IQP 量子生成模型（{nb} 量子位元）', 'quantum', probs(best_th)))
+            fin_pr = probs(th); nz = cd > 0
+            if float(-np.sum(cd[nz] * np.log(np.maximum(fin_pr[nz], 1e-15)))) < best_loss: best_th = th.copy()
+            return best_th
+        sig_best = min((0.05, 0.4, 0.8, 1.2), key=lambda s: nll(probs(fit_iqp(inner, s)), val))
+        out.append((f'IQP 量子生成模型（{nb} 量子位元）', 'quantum', probs(fit_iqp(tr, sig_best))))
         if nb <= 10:  # hardware-efficient quantum circuit Born machine, exact parameter-shift gradient of the NLL
+            c = np.bincount(tr, minlength=N) / len(tr)
             pq, _ = train_he(nb, 3, lambda p: np.where(c > 0, -c / np.maximum(p, 1e-12), 0), 150 if nb <= 8 else 80)
             out.append((f'量子電路生成模型 QCBM（{nb} 量子位元）', 'quantum', pq))
         return out
-    nte = len(x) * 3 // 10; per = []   # per split: {name: (kind, per-sample log2 p on test)}
+    per = []   # per split: {name: (kind, per-sample log2 p on test)}
     for rep_ in range(REPEATS):
         idx = rng.permutation(len(x)); te, tr = x[idx[:nte]], x[idx[nte:]]
         per.append({nm: (k, np.log2(np.maximum(p[te], 1e-12))) for nm, k, p in models(tr)})

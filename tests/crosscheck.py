@@ -29,4 +29,24 @@ check('MaxCut 精確最佳值（jobs）', abs(ns['cut'](ej, ns['exact'](nj, ej))
 warn('RQAOA 結果（jobs）', abs(ns['cut'](ej, ns['rqaoa'](nj, ej)) - js['jobs']['rqaoa']) < 1e-9, f"py {ns['cut'](ej, ns['rqaoa'](nj, ej))} / js {js['jobs']['rqaoa']}")
 npn, ep = ns['build_graph'](pd.read_csv(root / 'samples' / 'paint.csv'))
 warn('RQAOA 結果（paint）', abs(ns['cut'](ep, ns['rqaoa'](npn, ep)) - js['paint']['rqaoa']) < 1e-9, f"py {ns['cut'](ep, ns['rqaoa'](npn, ep))} / js {js['paint']['rqaoa']}")
+# 5. Python fwht vs dense Hadamard
+import math
+H6 = np.array([[1.0]])
+for _ in range(6): H6 = np.kron(H6, np.array([[1, 1], [1, -1]]) / math.sqrt(2))
+v6 = np.random.default_rng(1).standard_normal(64) + 1j * np.random.default_rng(2).standard_normal(64)
+fw_err = float(np.max(np.abs(ns['fwht'](v6) - H6 @ v6)))
+check('Python FWHT vs 稠密 Hadamard 矩陣', fw_err < 1e-12, f'max diff {fw_err:.1e}')
+# 6. Python Warm-start QAOA little-endian state order
+psi_w = ns['_warm_state']([0.2, 1.4])
+exp_w = math.sin(0.1) ** 2 * math.cos(0.7) ** 2
+check('Python Warm-start QAOA 位元序', abs(abs(psi_w[1]) ** 2 - exp_w) < 1e-12, f'{abs(psi_w[1])**2:.6f} vs {exp_w:.6f}')
+# 7. Python CVaR-QAOA exact boundary (no double count)
+cvar_v = ns['_cvar_val'](np.array([0.04, 0.06, 0.90]), np.array([-10.0, -5.0, 2.0]), np.array([0, 1, 2]), 0.10)
+check('Python CVaR-QAOA 邊界無重複計數', abs(cvar_v - (-7.0)) < 1e-12, f'got {cvar_v}')
+# 8. Python build_qubo self-pair & rqaoa isolated-node guard
+df_self = pd.DataFrame([{'kind': 'linear', 'a': 'x', 'b': '', 'value': 1}, {'kind': 'pair', 'a': 'x', 'b': 'x', 'value': 3}, {'kind': 'linear', 'a': 'y', 'b': '', 'value': 2}])
+_, _, mq_self = ns['build_qubo'](df_self)
+edges_iso = np.array([(i, j, 1.0) for i in range(15) for j in range(i + 1, 15) if (i + j) % 3 == 0], float)
+z_iso = ns['rqaoa'](40, edges_iso, 8)
+check('Python QUBO 自環與 RQAOA 孤立節點防護', mq_self['olin'][0] == 4.0 and ns['cut'](edges_iso, z_iso) > 0)
 print('JS 與 Python 版本一致' if not fails else f'{fails} 項不一致'); sys.exit(1 if fails else 0)

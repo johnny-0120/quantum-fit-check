@@ -1,5 +1,9 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>量子適用性健檢</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Sora:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
@@ -22,8 +26,8 @@
   --accent:#78b3dd; --accent-soft:#1a2b3a; --classical:#7fa8cc; --quantum:#e69a52;
   --go:#6bcf98; --go-soft:#14301f; --hold:#e4b357; --hold-soft:#33280f; --stop:#ec8a80; --stop-soft:#3a1c1a; color-scheme:dark}
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15.5px;line-height:1.7}
-.wrap{max-width:960px;margin:0 auto;padding-block:36px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:28px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15.5px;line-height:1.7}
+.wrap{width:100%;max-width:960px;margin:0 auto;padding-block:36px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:28px}
 h1,h2,h3{margin:0;text-wrap:balance}
 h1{font-family:var(--f-display);font-size:clamp(28px,5vw,40px);line-height:1.2;letter-spacing:-.01em}
 h2{font-family:var(--f-display);font-size:21px;line-height:1.35}
@@ -55,7 +59,7 @@ a.btn{display:inline-block;text-decoration:none}
 .samples{display:flex;flex-wrap:wrap;gap:8px}
 textarea{width:100%;min-height:90px;font-family:var(--f-mono);font-size:12.5px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);padding:10px;resize:vertical}
 select,input[type=number]{font:inherit;font-size:14px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);padding:5px 8px;max-width:100%}
-.preview{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+.preview{max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:6px}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
 th{background:var(--soft);color:var(--muted);font-weight:500;font-size:12.5px}
@@ -87,17 +91,20 @@ label.card .d{font-size:13.5px;color:var(--muted)}
 .red .lamp{color:var(--stop)} .yellow .lamp{color:var(--hold)} .green .lamp{color:var(--go)}
 .verdict h2{font-size:22px}
 .meta-row{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13.5px;color:var(--muted)}
+#report{min-width:0}
+#repBody{display:flex;flex-direction:column;gap:18px;min-width:0}
+#repBody>*{min-width:0}
 .board{display:flex;flex-direction:column;gap:8px}
-.row{display:grid;grid-template-columns:minmax(0,15em) minmax(0,1fr) 7.5em;gap:12px;align-items:center;font-size:14px}
+.row{display:grid;grid-template-columns:minmax(0,15em) minmax(0,1fr) minmax(6.5em,auto);gap:12px;align-items:center;font-size:14px}
 .row .nm{display:flex;flex-direction:column;line-height:1.35;min-width:0}
 .row .nm small{color:var(--muted);font-size:12px}
 .row .track{height:16px;background:var(--soft);border-radius:3px;position:relative;overflow:hidden}
 .row .fill{position:absolute;inset:0 auto 0 0;border-radius:3px;background:var(--classical)}
 .row.quantum .fill{background:var(--quantum)}
 .row.quantum .nm b{color:var(--quantum)}
-.row .val{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:13.5px}
+.row .val{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:13.5px;white-space:nowrap}
 .row.best .val{font-weight:700}
-@media (max-width:560px){.row{grid-template-columns:1fr 6.5em}.row .track{grid-column:1/-1;order:3}}
+@media (max-width:560px){.row{grid-template-columns:minmax(0,1fr) auto}.row .track{grid-column:1/-1;order:3}}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
 .legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:var(--classical)}
 .legend span.q::before{background:var(--quantum)}
@@ -109,7 +116,7 @@ label.card .d{font-size:13.5px;color:var(--muted)}
 .diag .bd .x{font-size:13.5px;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media (max-width:720px){.grid2{grid-template-columns:1fr}}
-.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+.tbl{max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:6px}
 details{border:1px solid var(--line);border-radius:6px;padding:10px 14px;background:var(--panel)}
 summary{cursor:pointer;font-weight:500}
 details[open] summary{margin-bottom:8px}
@@ -133,6 +140,8 @@ td.wrap{white-space:normal;min-width:16em}
 footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:6px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
+</head>
+<body>
 
 <div class="wrap">
 <header>
@@ -342,7 +351,7 @@ mobile,night,added_cart,purchased
   const E = window.QFC;
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  let table = null, source = '', worker = null, running = false, lastResult = null, suggestedMode = null;
+  let table = null, source = '', worker = null, workerUrl = null, running = false, runSeq = 0, lastResult = null, lastSource = '', suggestedMode = null;
 
   // worker from the engine source
   const glue = `
@@ -357,14 +366,23 @@ self.onmessage = function(ev){
     self.postMessage({type:'done', res});
   } catch (e) { self.postMessage({type:'error', msg: e.message || String(e)}); }
 };`;
+  function disposeWorker(){
+    if (worker) { worker.terminate(); worker = null; }
+    if (workerUrl) { URL.revokeObjectURL(workerUrl); workerUrl = null; }
+  }
   function makeWorker(){
-    try { const src = $('qfc-engine').textContent + '\n' + glue; return new Worker(URL.createObjectURL(new Blob([src], {type:'text/javascript'}))); }
-    catch(e){ return null; }
+    try {
+      disposeWorker();
+      const src = $('qfc-engine').textContent + '\n' + glue;
+      workerUrl = URL.createObjectURL(new Blob([src], {type:'text/javascript'}));
+      return new Worker(workerUrl);
+    } catch(e){ disposeWorker(); return null; }
   }
 
   function setData(text, label){
     const t = E.parseCSV(text);
     if (!t.rows.length || t.header.length < 2) { showErr('讀不到資料：請確認是 CSV 格式，而且至少有兩欄。'); return false; }
+    if (running) cancelRun(true);
     table = t; source = label; hideErr();
     $('dataInfo').textContent = '已載入「' + label + '」：' + t.rows.length.toLocaleString() + ' 筆 × ' + t.header.length + ' 欄' + (t.truncated ? '（只讀前 20,000 筆）' : '');
     const pv = $('preview'); pv.hidden = false;
@@ -372,7 +390,7 @@ self.onmessage = function(ev){
     const sg = E.suggestTask(t); suggestedMode = sg.mode || null;
     $('suggest').textContent = '系統判斷：' + sg.why;
     setTask(sg.task);
-    $('runBtn').disabled = false; $('progMsg').textContent = '準備好了';
+    $('runBtn').disabled = false; $('progMsg').textContent = '準備好了'; $('estMsg').textContent = ''; $('progBar').style.width = '0%';
     return true;
   }
   function setTask(task){ $('t-' + task).checked = true; renderCfg(); }
@@ -400,44 +418,77 @@ self.onmessage = function(ev){
   }
   function readCfg(){
     const task = currentTask();
-    if (task === 'opt') { const wv = Number($('c-w').value); return { mode: $('c-mode').value === 'spec' || $('c-mode').value === 'qubo' ? $('c-mode').value : $('c-mode').value, src: Number($('c-src').value), dst: Number($('c-dst').value), weight: wv < 0 ? -1 : wv }; }
+    if (task === 'opt') { const wv = Number($('c-w').value); return { mode: $('c-mode').value, src: Number($('c-src').value), dst: Number($('c-dst').value), weight: wv < 0 ? -1 : wv }; }
     if (task === 'cls') return { label: Number($('c-label').value) };
-    return { cols: Array.from(document.querySelectorAll('.c-col:checked')).map(x => Number(x.value)).slice(0,10) };
+    const cols = Array.from(document.querySelectorAll('.c-col:checked')).map(x => Number(x.value));
+    if (cols.length < 3) throw new Error('請至少勾選 3 個欄位才能做分布學習。');
+    return { cols };
   }
   function showErr(m){ const e = $('err'); e.innerHTML = esc(m) + ' <span class="small">看不懂或覺得是程式的問題？<a href="https://github.com/johnny-0120/quantum-fit-check/issues/new" target="_blank" rel="noopener">回報問題</a>（請不要附上機密資料）。</span>'; e.hidden = false; }
   function hideErr(){ $('err').hidden = true; }
   function prog(msg, pct){ $('progMsg').textContent = msg; if (pct != null) $('progBar').style.width = Math.max(2, Math.min(100, pct)) + '%'; }
 
   let timer = null, t0run = 0;
+  function specVarCount(){
+    const hdr = table.header.map(h => h.toLowerCase().trim());
+    const ki = hdr.indexOf('kind'), ai = hdr.indexOf('a'), bi = hdr.indexOf('b');
+    if (ki < 0 || ai < 0) return Math.max(3, Math.round(table.rows.length / 3));
+    const vars = new Set();
+    for (const r of table.rows) {
+      const k = (r[ki] || '').toLowerCase().trim(), a = (r[ai] || '').trim(), b = bi >= 0 ? (r[bi] || '').trim() : '';
+      if ((k === 'linear' || k === 'cost') && a) vars.add(a);
+      else if (k === 'pair' || k === 'conflict') { if (a) vars.add(a); if (b) vars.add(b); }
+      else if (k === 'member' && b) vars.add(b);
+    }
+    return Math.max(3, vars.size + 1);
+  }
   function estimate(task, cfg){
     const n = table.rows.length;
     if (task === 'cls') { const k = Math.min(n, 240); return Math.round(8 + 25 * k / 240); }
     if (task === 'gen') { const b = Math.min(10, (cfg.cols || []).length || table.header.length); return Math.round(3 + 6 * Math.pow(2, b) / 1024); }
-    const v = cfg.mode === 'spec' || cfg.mode === 'qubo' ? Math.max(table.rows.length / 3, 3) : (cfg.mode === 'matrix' ? table.header.length : new Set(table.rows.map(r => r[cfg.src]).concat(table.rows.map(r => r[cfg.dst]))).size);
+    const v = cfg.mode === 'spec' ? specVarCount() : cfg.mode === 'qubo' ? table.header.length + 1 : (cfg.mode === 'matrix' ? table.header.length : new Set(table.rows.map(r => r[cfg.src]).concat(table.rows.map(r => r[cfg.dst]))).size);
     return v <= 14 ? 15 : Math.round(3 + v / 30);
   }
   function stopTimer(){ clearInterval(timer); timer = null; $('cancelBtn').hidden = true; }
-  function cancelRun(){ if (!running) return; if (worker) { worker.terminate(); worker = null; } running = false; stopTimer(); $('runBtn').disabled = false; prog('已取消', 0); }
+  function cancelRun(silent){
+    if (!running) return;
+    runSeq++;
+    disposeWorker();
+    running = false; stopTimer(); $('runBtn').disabled = false; $('estMsg').textContent = '';
+    if (!silent) prog('已取消', 0);
+  }
   function run(){
     if (!table || running) return;
     const task = currentTask(); let cfg; try { cfg = readCfg(); } catch(e) { showErr('設定讀取失敗：' + e.message); return; }
-    if (task === 'opt' && cfg.weight === -1) cfg.weight = -1;
+    const mySeq = ++runSeq; const runSource = source; let gotProgress = false;
     hideErr(); running = true; $('runBtn').disabled = true; prog('開始計算…', 3);
     const est = estimate(task, cfg); t0run = Date.now(); $('cancelBtn').hidden = false; $('estMsg').textContent = '預計約 ' + est + ' 秒（依電腦速度不同）';
     timer = setInterval(() => { $('estMsg').textContent = '已經過 ' + Math.round((Date.now() - t0run) / 1000) + ' 秒，預計約 ' + est + ' 秒（依電腦速度不同）'; }, 1000);
     const finish = (res, err) => {
-      if (!running) return;
+      if (!running || mySeq !== runSeq) return;
       running = false; $('runBtn').disabled = false; stopTimer(); $('estMsg').textContent = '用了 ' + Math.round((Date.now() - t0run) / 1000) + ' 秒';
       if (err) { showErr(err); prog('沒有完成', 0); return; }
-      prog('完成', 100); lastResult = res; renderReport(res);
+      prog('完成', 100); lastResult = res; lastSource = runSource; renderReport(res, runSource);
+    };
+    const runSync = () => {
+      setTimeout(() => {
+        if (!running || mySeq !== runSeq) return;
+        try {
+          let res;
+          if (task === 'opt') { const g = (cfg.mode === 'spec' || cfg.mode === 'qubo') ? E.buildQubo(table, cfg) : E.buildGraph(table, cfg); res = E.analyzeOpt(g, prog); }
+          else if (task === 'cls') res = E.analyzeCls(E.prepareCls(table, cfg.label), prog);
+          else res = E.analyzeGen(E.prepareGen(table, cfg.cols), prog);
+          finish(res);
+        } catch(e) { finish(null, e.message || String(e)); }
+      }, 30);
     };
     if (!worker) worker = makeWorker();
     if (worker) {
-      worker.onmessage = ev => { const d = ev.data; if (d.type === 'progress') prog(d.msg, d.pct); else if (d.type === 'done') finish(d.res); else finish(null, d.msg); };
-      worker.onerror = e => { worker = null; finish(null, '計算時發生錯誤：' + (e.message || '未知錯誤')); };
+      worker.onmessage = ev => { if (mySeq !== runSeq) return; const d = ev.data; if (d.type === 'progress') { gotProgress = true; prog(d.msg, d.pct); } else if (d.type === 'done') finish(d.res); else finish(null, d.msg); };
+      worker.onerror = e => { if (mySeq !== runSeq) return; disposeWorker(); if (!gotProgress) { runSync(); return; } finish(null, '計算時發生錯誤：' + (e.message || '未知錯誤')); };
       worker.postMessage({ task, t: table, cfg });
     } else {
-      setTimeout(() => { try { let res; if (task === 'opt') { const g = (cfg.mode === 'spec' || cfg.mode === 'qubo') ? E.buildQubo(table, cfg) : E.buildGraph(table, cfg); res = E.analyzeOpt(g, prog); } else if (task === 'cls') res = E.analyzeCls(E.prepareCls(table, cfg.label), prog); else res = E.analyzeGen(E.prepareGen(table, cfg.cols), prog); finish(res); } catch(e) { finish(null, e.message); } }, 30);
+      runSync();
     }
   }
 
@@ -446,30 +497,37 @@ self.onmessage = function(ev){
   function bars(items, higherBetter, fmt){
     const vals = items.map(x => x.v); const best = higherBetter ? Math.max(...vals) : Math.min(...vals);
     let lo = Math.min(...vals), hi = Math.max(...vals);
-    if (higherBetter) { lo = Math.min(lo, 0); } else { lo = Math.min(lo, 0); }
-    const span = (hi - lo) || 1;
+    let base = lo, span = hi - lo;
+    if (span < 1e-12) { base = lo - 1; span = 1; }
+    else if (!higherBetter && lo >= 0 && hi > 0 && lo / hi > 0.5) { base = Math.max(0, lo - 0.25 * span); span = hi - base; }
+    else { base = Math.min(lo, 0); span = (hi - base) || 1; }
     return '<div class="board">' + items.map(x => {
-      const w = Math.max(3, (x.v - lo) / span * 100);
+      const w = Math.abs(hi - lo) < 1e-12 ? (higherBetter ? 100 : 50) : Math.max(3, (x.v - base) / span * 100);
       const isBest = Math.abs(x.v - best) < 1e-9;
       return '<div class="row ' + x.kind + (isBest ? ' best' : '') + '"><span class="nm"><b>' + esc(x.name) + '</b>' + (x.sub ? '<small>' + esc(x.sub) + '</small>' : '') + '</span><span class="track" aria-hidden="true"><span class="fill" style="width:' + w.toFixed(1) + '%"></span></span><span class="val">' + fmt(x.v) + (isBest ? ' ★' : '') + '</span></div>';
     }).join('') + '</div><div class="legend"><span>古典方法</span><span class="q">量子方法（模擬）</span><span>★ 最好</span></div>';
   }
   function diagHTML(ds){ const L = {ok:'正常', warn:'注意', bad:'不利量子'}; return '<div class="diag">' + ds.map(d => '<span class="st ' + d.status + '">' + L[d.status] + '</span><div class="bd"><b>' + esc(d.name) + '</b><span class="v">' + esc(d.value) + '</span><span class="x">' + esc(d.explain) + '</span></div>').join('') + '</div>'; }
 
-  function renderReport(res){
-    $('repSrc').textContent = '資料：' + source;
+  function renderReport(res, srcName){
+    const src = srcName || lastSource || source;
+    $('repSrc').textContent = '資料：' + src;
     const v = res.verdict; let html = '';
     html += '<div class="verdict ' + v.level + '"><span class="lamp">' + LV[v.level] + '</span><h2>' + esc(v.title) + '</h2><ul>' + v.reasons.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul></div>';
     if (res.task === 'opt') {
-      html += '<div class="meta-row"><span>' + (res.qubo ? res.qubo.nv + ' 個 0/1 變數（加 1 個參考位元）' : res.n + ' 個變數') + '</span><span>' + res.m + ' 條關係</span><span>每種隨機方法獨立跑 ' + res.seeds + ' 次</span>' + (res.qubo && res.qubo.groups.length ? '<span>' + res.qubo.groups.length + ' 條「剛好選 k 個」限制（懲罰係數 ' + res.qubo.groups[0].penalty + '）</span>' : '') + (res.sampled ? '<span>從 ' + res.originalN + ' 個節點抽樣</span>' : '') + (res.sv ? '<span>量子態完整模擬 ' + res.sv.n + ' 量子位元，每種方法 ' + res.sv.shots + ' 次量測</span>' : '<span>超過 14 個變數，QAOA／CVaR／Warm-start 未執行</span>') + '</div>';
+      const pens = res.qubo && res.qubo.groups.length ? Array.from(new Set(res.qubo.groups.map(g2 => g2.penalty))).join('／') : '';
+      html += '<div class="meta-row"><span>' + (res.qubo ? res.qubo.nv + ' 個 0/1 變數（加 1 個參考位元）' : res.n + ' 個變數') + '</span><span>' + res.m + ' 條關係</span><span>每種隨機方法獨立跑 ' + res.seeds + ' 次</span>' + (res.qubo && res.qubo.groups.length ? '<span>' + res.qubo.groups.length + ' 條「剛好選 k 個」限制（懲罰係數 ' + esc(pens) + '）</span>' : '') + (res.sampled ? '<span>從 ' + res.originalN + ' 個節點抽樣</span>' : '') + (res.sv ? '<span>量子態完整模擬 ' + res.sv.n + ' 量子位元，每種方法 ' + res.sv.shots + ' 次量測</span>' : '<span>超過 14 個量子位元，QAOA／CVaR／Warm-start 未執行</span>') + '</div>';
       const runs = m => m.deterministic ? '確定性，跑 1 次' : res.seeds + ' 次中最好；平均 ' + (+(res.qubo ? m.costMean : m.mean).toFixed(2));
-      if (res.qubo) html += '<div class="panel"><h3>每種方法找到的最低成本（越低越好）</h3>' + bars(res.methods.map(m => ({ name: m.name, kind: m.kind, v: m.cost, sub: (m.feasible ? '滿足全部限制' : '違反 ' + m.viol.length + ' 條限制') + '；' + runs(m) + '；每次 ' + fmtMs(m.ms) })), false, x => (+x.toFixed(3)).toLocaleString()) + '<p class="small muted">最好答案選了：' + esc((res.methods.find(m => m.kind === 'classical' && m.feasible) || res.methods[0]).chosen.join('、')) + '</p></div>';
+      if (res.qubo) {
+        const bestM = res.methods.filter(m => m.feasible).sort((a, b) => a.cost - b.cost)[0] || res.methods.slice().sort((a, b) => a.cost - b.cost)[0];
+        html += '<div class="panel"><h3>每種方法找到的最低成本（越低越好）</h3>' + bars(res.methods.map(m => ({ name: m.name, kind: m.kind, v: m.cost, sub: (m.feasible ? '滿足全部限制' : '違反 ' + m.viol.length + ' 條限制') + '；' + runs(m) + '；每次 ' + fmtMs(m.ms) })), false, x => (+x.toFixed(3)).toLocaleString()) + '<p class="small muted">最好答案選了：' + esc(bestM.chosen.length ? bestM.chosen.join('、') : '（未選取任何變數）') + '</p></div>';
+      }
       else html += '<div class="panel"><h3>每種方法找到的最好答案（跨組強度總和，越大越好）</h3>' + bars(res.methods.map(m => ({ name: m.name, kind: m.kind, v: m.value, sub: runs(m) + '；' + (m.note ? m.note + '；' : '') + '每次 ' + fmtMs(m.ms) })), true, x => (+x.toFixed(3)).toLocaleString()) + '</div>';
       html += '<p class="small muted">量子方法的時間是「在古典電腦上模擬」的時間，不代表量子硬體的速度，不能拿來比快慢。</p>';
       const qsv = res.methods.filter(m => m.expected != null);
       if (qsv.length) {
-        html += '<div class="panel"><h3>量子方法的細節</h3><p class="small muted">「最好的一次」只看 1024 次量測中最好的；「平均」和「抽到最佳解的機率」才看得出線路本身好不好。</p><div class="tbl"><table><thead><tr><th>方法</th><th>最好的一次</th><th>平均答案</th><th>抽到最佳解的機率</th><th>雙位元閘數</th></tr></thead><tbody>' +
-          qsv.map(m => '<tr><td>' + esc(m.name) + '</td><td class="mono">' + (+m.value.toFixed(3)) + '</td><td class="mono">' + m.expected.toFixed(2) + '</td><td class="mono">' + (m.pOpt * 100).toFixed(2) + '%</td><td class="mono">' + m.twoQ + '</td></tr>').join('') + '</tbody></table></div></div>';
+        html += '<div class="panel"><h3>量子方法的細節</h3><p class="small muted">「最好的一次」只看 1024 次量測中最好的；「平均」和「抽到最佳解的機率」才看得出線路本身好不好。</p><div class="tbl"><table><thead><tr><th>方法</th><th>' + (res.qubo ? '最低成本（最好的一次）' : '最好的一次') + '</th><th>' + (res.qubo ? '平均成本' : '平均答案') + '</th><th>抽到最佳解的機率</th><th>雙位元閘數</th></tr></thead><tbody>' +
+          qsv.map(m => '<tr><td>' + esc(m.name) + '</td><td class="mono">' + (+(res.qubo ? m.cost : m.value).toFixed(3)) + '</td><td class="mono">' + (res.qubo ? (m.expectedCost != null ? m.expectedCost.toFixed(2) : '—') : m.expected.toFixed(2)) + '</td><td class="mono">' + (m.pOpt * 100).toFixed(2) + '%</td><td class="mono">' + m.twoQ + '</td></tr>').join('') + '</tbody></table></div></div>';
       }
     } else if (res.task === 'cls') {
       html += '<div class="meta-row"><span>預測「' + esc(res.labelName) + '」</span><span>' + res.n + ' 筆</span><span>類別分布：' + res.classes.map((c,i) => esc(c) + ' ' + res.classCounts[i]).join('、') + '</span><span>量子核函數 ' + res.q + ' 量子位元</span></div>';
@@ -492,11 +550,11 @@ self.onmessage = function(ev){
     html += '<div class="run"><button class="btn" type="button" id="copyRep">複製文字報告</button><span class="small muted" id="copyMsg"></span></div>';
     html += '<textarea id="repText" readonly hidden></textarea>';
     $('repBody').className = ''; $('repBody').innerHTML = html;
-    $('copyRep').onclick = () => { const txt = textReport(res); const ta = $('repText'); ta.value = txt; navigator.clipboard && navigator.clipboard.writeText(txt).then(() => { $('copyMsg').textContent = '已複製'; }, () => { ta.hidden = false; ta.select(); $('copyMsg').textContent = '請手動複製下方文字'; }); if (!navigator.clipboard) { ta.hidden = false; ta.select(); } };
+    $('copyRep').onclick = () => { const txt = textReport(res, src); const ta = $('repText'); ta.value = txt; navigator.clipboard && navigator.clipboard.writeText(txt).then(() => { $('copyMsg').textContent = '已複製'; }, () => { ta.hidden = false; ta.select(); $('copyMsg').textContent = '請手動複製下方文字'; }); if (!navigator.clipboard) { ta.hidden = false; ta.select(); $('copyMsg').textContent = '請手動複製下方文字'; } };
   }
-  function textReport(res){
+  function textReport(res, srcName){
     const L = { red: '紅燈', yellow: '黃燈', green: '綠燈' }; const v = res.verdict; const out = [];
-    out.push('# 量子適用性健檢報告', '資料：' + source, '結論：' + L[v.level] + '｜' + v.title, ...v.reasons.map(r => '- ' + r), '');
+    out.push('# 量子適用性健檢報告', '資料：' + (srcName || lastSource || source), '結論：' + L[v.level] + '｜' + v.title, ...v.reasons.map(r => '- ' + r), '');
     if (res.task === 'opt') { out.push('| 方法 | 類型 | 最好答案 | 時間 |', '|---|---|---|---|'); res.methods.forEach(m => out.push('| ' + m.name + ' | ' + (m.kind === 'quantum' ? '量子(模擬)' : '古典') + ' | ' + (res.qubo ? '成本 ' + (+m.cost.toFixed(3)) + (m.feasible ? '' : '（違反限制）') : (+m.value.toFixed(3))) + ' | ' + fmtMs(m.ms) + ' |')); }
     else if (res.task === 'cls') { out.push('| 模型 | 類型 | 平衡準確率 |', '|---|---|---|'); res.models.forEach(m => out.push('| ' + m.name + ' | ' + (m.kind === 'quantum' ? '量子(模擬)' : '古典') + ' | ' + (m.mean * 100).toFixed(1) + '% ± ' + (m.sd * 100).toFixed(1) + ' |')); }
     else { out.push('| 模型 | 類型 | 測試 bits/筆 |', '|---|---|---|'); res.models.forEach(m => out.push('| ' + m.name + ' | ' + (m.kind === 'quantum' ? '量子(模擬)' : '古典') + ' | ' + m.test.toFixed(3) + ' |')); }
@@ -511,7 +569,7 @@ self.onmessage = function(ev){
   document.querySelectorAll('[data-sample]').forEach(b => b.addEventListener('click', () => { const s = SAMPLE[b.dataset.sample]; if (setData(s[1](), s[0])) { setTask(s[2]); if (b.dataset.sample === 'paint') $('suggest').textContent = '噴漆換色已轉成等價的 Ising 形式：每款車一個變數（先紅或先藍），強度是相鄰車身的關係。跨組強度越大，換色次數越少。'; run(); } }));
   document.querySelectorAll('input[name=task]').forEach(r => r.addEventListener('change', renderCfg));
   $('runBtn').addEventListener('click', run);
-  $('cancelBtn').addEventListener('click', cancelRun);
+  $('cancelBtn').addEventListener('click', () => cancelRun(false));
   $('usePaste').addEventListener('click', () => setData($('paste').value, '貼上的資料'));
   // Excel on Traditional-Chinese Windows saves "CSV" as Big5; detect UTF-8 / UTF-16 / Big5 instead of assuming UTF-8
   function decodeBytes(buf){
@@ -525,13 +583,15 @@ self.onmessage = function(ev){
   const readFile = f => { if (!f) return; if (f.size > 15e6) { showErr('檔案超過 15 MB，請先抽樣成小檔再上傳。'); return; } const fr = new FileReader();
     fr.onload = () => { const d = decodeBytes(fr.result); if (setData(d.text, f.name) && d.enc !== 'UTF-8') $('dataInfo').textContent += '。偵測到 ' + d.enc + ' 編碼，已自動轉換；若中文仍是亂碼，請在 Excel 另存為「CSV UTF-8」。'; };
     fr.onerror = () => showErr('讀檔失敗，請再試一次。'); fr.readAsArrayBuffer(f); };
-  $('file').addEventListener('change', e => readFile(e.target.files[0]));
+  $('file').addEventListener('change', e => { readFile(e.target.files[0]); e.target.value = ''; });
   const drop = $('drop');
   ['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
-  ['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
-  drop.addEventListener('drop', e => readFile(e.dataTransfer.files[0]));
+  drop.addEventListener('dragleave', e => { e.preventDefault(); if (!drop.contains(e.relatedTarget)) drop.classList.remove('over'); });
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); readFile(e.dataTransfer.files[0]); });
 
   // open in a working state: run the CDN sample
   const s = SAMPLE.cloudflare; if (setData(s[1](), s[0])) { setTask('cls'); run(); }
 })();
 </script>
+</body>
+</html>

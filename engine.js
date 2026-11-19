@@ -102,11 +102,11 @@
   E.parseCSV = function (text, maxRows) {
     maxRows = maxRows || 20000;
     text = String(text).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
-    const first = text.split('\n', 1)[0] || '';
+    const first = text.split('\n').find(l => l.trim() !== '') || '';
     const cand = [',', '\t', ';', '|'];
     let delim = ','; let best = -1;
     for (const d of cand) { const c = first.split(d).length; if (c > best) { best = c; delim = d; } }
-    const rows = []; let row = [], cell = '', q = false;
+    const rows = []; let row = [], cell = '', q = false, truncated = false;
     for (let i = 0; i < text.length; i++) {
       const ch = text[i];
       if (q) {
@@ -114,21 +114,25 @@
         else cell += ch;
       } else if (ch === '"') q = true;
       else if (ch === delim) { row.push(cell.trim()); cell = ''; }
-      else if (ch === '\n') { row.push(cell.trim()); cell = ''; if (row.some(x => x !== '')) rows.push(row); row = []; if (rows.length > maxRows) break; }
+      else if (ch === '\n') { row.push(cell.trim()); cell = ''; if (row.some(x => x !== '')) rows.push(row); row = []; if (rows.length > maxRows + 1) { truncated = true; break; } }
       else cell += ch;
     }
-    if (cell !== '' || row.length) { row.push(cell.trim()); if (row.some(x => x !== '')) rows.push(row); }
-    if (!rows.length) return { header: [], rows: [] };
+    if (!truncated && (cell !== '' || row.length)) { row.push(cell.trim()); if (row.some(x => x !== '')) rows.push(row); }
+    if (!rows.length) return { header: [], rows: [], truncated: false };
     const isNum = s => s !== '' && isFinite(Number(s));
     let header;
     const r0 = rows[0], r1 = rows[1] || [];
-    const hasHeader = r0.some((s, i) => !isNum(s) && (r1[i] === undefined || isNum(r1[i]) || r1[i] !== s)) && !(r0.every(isNum));
+    const sameMixedShape = r1.length === r0.length && r0.some(isNum) && r0.every((s, i) => isNum(s) === isNum(r1[i]));
+    const hasHeader = !sameMixedShape && !(r0.every(isNum)) && r0.some((s, i) => !isNum(s) && (r1[i] === undefined || isNum(r1[i]) || r1[i] !== s));
     if (hasHeader) header = rows.shift().map((h, i) => h || ('欄位' + (i + 1)));
     else header = r0.map((_, i) => '欄位' + (i + 1));
+    if (rows.length > maxRows) { rows.length = maxRows; truncated = true; }
     const w = header.length;
     const body = rows.filter(r => r.length >= Math.min(2, w)).map(r => { const o = r.slice(0, w); while (o.length < w) o.push(''); return o; });
-    return { header, rows: body, truncated: rows.length > maxRows };
+    return { header, rows: body, truncated };
   };
+
+  const isMissing = v => v === '' || v == null || /^(na|null|nan)$/i.test(String(v).trim());
 
   E.profileColumns = function (t) {
     return t.header.map((h, j) => {
@@ -193,8 +197,9 @@
       const get = s => { if (!id.has(s)) { id.set(s, labels.length); labels.push(s); } return id.get(s); };
       for (const r of t.rows) {
         const a = r[si], b = r[di]; if (a === '' || b === '' || a == null || b == null || a === b) continue;
-        let x = get(a), y = get(b); const val = wi >= 0 ? Number(r[wi]) : 1;
+        const val = wi >= 0 ? (isMissing(r[wi]) ? NaN : Number(r[wi])) : 1;
         if (!isFinite(val) || val === 0) continue;
+        let x = get(a), y = get(b);
         if (x > y) [x, y] = [y, x];
         const k = x + ',' + y; emap.set(k, (emap.get(k) || 0) + val);
       }
@@ -344,15 +349,24 @@
       trace.push({ remaining: active.size, corr: bc, relation: s > 0 ? '同組' : '異組' });
       if (progress && trace.length % 5 === 0) progress('RQAOA 縮減中：剩 ' + active.size + ' 個變數');
     }
-    // brute-force remaining
-    const rest = Array.from(active); const m = rest.length; const pos = new Map(rest.map((v, i) => [v, i]));
-    let bestE = Infinity, bestMask = 0;
-    for (let mask = 0; mask < (1 << m); mask++) {
-      let e = 0; for (let i = 0; i < m; i++) { const zi = (mask >> i) & 1 ? -1 : 1; for (const [w, J] of adj[rest[i]]) { const j = pos.get(w); if (j > i) e += J * zi * (((mask >> j) & 1) ? -1 : 1); } }
-      if (e < bestE) { bestE = e; bestMask = mask; }
-    }
+    // brute-force remaining (or local-search fallback if disconnected / zero-correlation broke loop early with >20 active)
+    const rest = Array.from(active);
+    const restActive = rest.filter(v => adj[v].size > 0);
     const z = new Int8Array(n).fill(1);
-    rest.forEach((v, i) => { z[v] = ((bestMask >> i) & 1) ? -1 : 1; });
+    if (restActive.length > 0 && restActive.length <= 20) {
+      const m = restActive.length; const pos = new Map(restActive.map((v, i) => [v, i]));
+      let bestE = Infinity, bestMask = 0;
+      for (let mask = 0; mask < (1 << m); mask++) {
+        let e = 0; for (let i = 0; i < m; i++) { const zi = (mask >> i) & 1 ? -1 : 1; for (const [w, J] of adj[restActive[i]]) { const j = pos.get(w); if (j > i) e += J * zi * (((mask >> j) & 1) ? -1 : 1); } }
+        if (e < bestE) { bestE = e; bestMask = mask; }
+      }
+      restActive.forEach((v, i) => { z[v] = ((bestMask >> i) & 1) ? -1 : 1; });
+    } else if (restActive.length > 20) {
+      const m = restActive.length; const pos = new Map(restActive.map((v, i) => [v, i]));
+      const subA = Array.from({ length: m }, (_, i) => Array.from(adj[restActive[i]].entries()).map(([w, J]) => [pos.get(w), J]));
+      const subZ = localSearch(m, subA, new Int8Array(m).fill(1));
+      restActive.forEach((v, i) => { z[v] = subZ[i]; });
+    }
     for (let k = stack.length - 1; k >= 0; k--) { const [e, kp, s] = stack[k]; z[e] = s * z[kp]; }
     return { z, value: cutValue(edges, z), steps: stack.length, trace };
   }
@@ -460,12 +474,16 @@
   // Adam + exact parameter-shift gradient of any loss L(p): dL/dθ = Σ_x ∂L/∂p_x · (p_x(θ+π/2) − p_x(θ−π/2))/2
   function trainHE(n, L, dLdp, steps, r, lr) {
     const P = n * (L + 1); const th = []; for (let k = 0; k < P; k++) th.push((k < n ? Math.PI / 2 : 0) + 0.1 * gauss(r));
-    const m = new Float64Array(P), v = new Float64Array(P);
+    const m = new Float64Array(P), v = new Float64Array(P), g = new Float64Array(P);
     for (let st = 0; st < steps; st++) {
       const p0 = heProbs(n, th, L); const gp = dLdp(p0);
       for (let k = 0; k < P; k++) {
         const o = th[k]; th[k] = o + Math.PI / 2; const pp = heProbs(n, th, L); th[k] = o - Math.PI / 2; const pm = heProbs(n, th, L); th[k] = o;
-        let gk = 0; for (let x = 0; x < pp.length; x++) gk += gp[x] * (pp[x] - pm[x]); gk /= 2;
+        let gk = 0; for (let x = 0; x < pp.length; x++) gk += gp[x] * (pp[x] - pm[x]);
+        g[k] = gk / 2;
+      }
+      for (let k = 0; k < P; k++) {
+        const gk = g[k];
         m[k] = 0.9 * m[k] + 0.1 * gk; v[k] = 0.999 * v[k] + 0.001 * gk * gk;
         th[k] -= (lr || 0.05) * (m[k] / (1 - Math.pow(0.9, st + 1))) / (Math.sqrt(v[k] / (1 - Math.pow(0.999, st + 1))) + 1e-8);
       }
@@ -473,6 +491,7 @@
     return { theta: th, p: heProbs(n, th, L), params: P };
   }
   E._heProbs = heProbs;
+  E._trainHE = trainHE;
 
   // ---- Grover adaptive search (Dürr–Høyer / Gilliam et al. 2021), exact amplitude-amplification statistics ----
   function groverAdaptive(S, r) {
@@ -520,17 +539,20 @@
       const lin = [], pairs = new Map(), origLin = [], origPairs = new Map(), groups = new Map();
       const addPair = (M, i, j, v) => { if (i === j) return false; const k = Math.min(i, j) + ',' + Math.max(i, j); M.set(k, (M.get(k) || 0) + v); return true; };
       for (const r of t.rows) {
-        const kind = (r[ki] || '').toLowerCase().trim(); const a = r[ai], b = bi >= 0 ? r[bi] : '', v = vi >= 0 ? Number(r[vi]) : 0;
-        if (kind === 'linear' || kind === 'cost') { const i = vid(a); lin[i] = (lin[i] || 0) + v; origLin[i] = (origLin[i] || 0) + v; }
-        else if (kind === 'pair' || kind === 'conflict') { const i = vid(a), j = vid(b); if (i === j) { lin[i] = (lin[i] || 0) + v; origLin[i] = (origLin[i] || 0) + v; } else { addPair(pairs, i, j, v); addPair(origPairs, i, j, v); } }
-        else if (kind === 'member') { if (!groups.has(a)) groups.set(a, { name: a, k: 1, members: [], penalty: null }); groups.get(a).members.push(vid(b)); }
-        else if (kind === 'choose' || kind === 'exactly') { if (!groups.has(a)) groups.set(a, { name: a, k: 1, members: [], penalty: null }); const g = groups.get(a); g.k = isFinite(Number(b)) && b !== '' ? Number(b) : 1; if (pi >= 0 && r[pi] !== '' && isFinite(Number(r[pi]))) g.penalty = Number(r[pi]); }
+        const kind = (r[ki] || '').toLowerCase().trim(); const a = String(r[ai] || '').trim(), b = bi >= 0 ? String(r[bi] || '').trim() : '';
+        const rawV = vi >= 0 ? r[vi] : ''; let v = 0;
+        if (!isMissing(rawV)) { v = Number(rawV); if (!isFinite(v)) throw new Error('規格表的 value 欄包含非數字：' + rawV); }
+        if ((kind === 'linear' || kind === 'cost') && a) { const i = vid(a); lin[i] = (lin[i] || 0) + v; origLin[i] = (origLin[i] || 0) + v; }
+        else if ((kind === 'pair' || kind === 'conflict') && a && b) { const i = vid(a), j = vid(b); if (i === j) { lin[i] = (lin[i] || 0) + v; origLin[i] = (origLin[i] || 0) + v; } else { addPair(pairs, i, j, v); addPair(origPairs, i, j, v); } }
+        else if (kind === 'member' && a && b) { if (!groups.has(a)) groups.set(a, { name: a, k: 1, members: [], penalty: null }); groups.get(a).members.push(vid(b)); }
+        else if ((kind === 'choose' || kind === 'exactly') && a) { if (!groups.has(a)) groups.set(a, { name: a, k: 1, members: [], penalty: null }); const g = groups.get(a); g.k = isFinite(Number(b)) && !isMissing(b) ? Number(b) : 1; if (pi >= 0 && !isMissing(r[pi]) && isFinite(Number(r[pi]))) g.penalty = Number(r[pi]); }
       }
       const nv = names.length; if (nv < 2) throw new Error('規格表至少要有 2 個變數。');
       // default penalty: twice the largest objective change a single variable can cause
       let sens = 0; for (let i = 0; i < nv; i++) { let s = Math.abs(origLin[i] || 0); for (const [k, v] of origPairs) { const [x, y] = k.split(',').map(Number); if (x === i || y === i) s += Math.abs(v); } sens = Math.max(sens, s); }
       const Pdef = Math.max(1, 2 * sens); let c0 = 0; const glist = [];
       for (const g of groups.values()) {
+        g.members = Array.from(new Set(g.members));
         const P = g.penalty != null ? g.penalty : Pdef; const k = g.k; glist.push({ name: g.name, k, members: g.members, penalty: P });
         for (const i of g.members) lin[i] = (lin[i] || 0) + P * (1 - 2 * k);
         for (let x = 0; x < g.members.length; x++) for (let y = x + 1; y < g.members.length; y++) addPair(pairs, g.members[x], g.members[y], 2 * P);
@@ -569,10 +591,11 @@
     const methods = [];
     // run a method SEEDS times with independent random streams; keep every value, the best answer and the mean time
     const multi = (name, kind, fn, extra) => {
-      const vals = [], times = []; let bestZ = null, bv = -Infinity, last = null;
-      for (let k = 0; k < SEEDS; k++) { const r = rng(seed * 1000 + 17 * k + 1); const t0 = now(); const o = fn(r, k); times.push(now() - t0); vals.push(o.value); last = o; if (o.value > bv) { bv = o.value; bestZ = o.z; } }
-      const mm = Object.assign({ name, kind, value: bv, values: vals, mean: mean(vals), ms: mean(times), z: bestZ }, extra || {}, typeof extra === 'function' ? {} : {});
-      if (last && last.note) mm.note = last.note; if (last && last.expected != null) { mm.expected = last.expected; mm.pOpt = last.pOpt; }
+      const vals = [], times = []; let bestZ = null, bv = -Infinity, bestObj = null;
+      for (let k = 0; k < SEEDS; k++) { const r = rng(seed * 1000 + 17 * k + 1); const t0 = now(); const o = fn(r, k); times.push(now() - t0); vals.push(o.value); if (o.value > bv || !bestObj) { bv = o.value; bestZ = o.z; bestObj = o; } }
+      const mm = Object.assign({ name, kind, value: bv, values: vals, mean: mean(vals), ms: mean(times), z: bestZ }, extra || {});
+      if (bestObj && bestObj.note) mm.note = bestObj.note;
+      if (bestObj && bestObj.expected != null) { mm.expected = bestObj.expected; mm.pOpt = bestObj.pOpt; }
       methods.push(mm); return mm;
     };
     const once = (name, kind, fn, extra) => { const t0 = now(); const o = fn(rng(seed * 1000 + 999)); const mm = Object.assign({ name, kind, value: o.value, values: [o.value], mean: o.value, ms: now() - t0, z: o.z, deterministic: true }, extra || {}); if (o.note) mm.note = o.note; methods.push(mm); return mm; };
@@ -589,7 +612,8 @@
     let gwRelax = null; multi('GW 半定規劃＋隨機超平面', 'classical', r => { const o = solveGW(n, A, edges, r); gwRelax = o.sdp; return o; }, { note: 'Goemans–Williamson 近似演算法' });
 
     progress('量子方法：RQAOA（p=1 精確模擬）', 32);
-    const rq = once('RQAOA（遞迴 QAOA）', 'quantum', () => { const o = rqaoa(n, edges, Math.min(8, n - 1), progress); o.note = '縮減 ' + o.steps + ' 步後窮舉剩下的變數（確定性演算法）'; return o; }, { qubits: n, twoQ: 2 * m });
+    let rqTrace = [];
+    once('RQAOA（遞迴 QAOA）', 'quantum', () => { const o = rqaoa(n, edges, Math.min(8, n - 1), progress); rqTrace = o.trace || []; o.note = '縮減 ' + o.steps + ' 步後窮舉剩下的變數（確定性演算法）'; return o; }, { qubits: n, twoQ: 2 * m });
 
     let sv = null;
     if (n <= 14) {
@@ -621,14 +645,15 @@
         multi('VQE（硬體高效線路）', 'quantum', r => { const he = trainHE(n, 2, () => S.C, 40, r, 0.08); const s = svSample(S, he.p, shots, r); let ec = 0; for (let x = 0; x < S.N; x++) ec += he.p[x] * S.cut[x]; return { value: s.best, z: zOf(s.bestX), expected: ec, pOpt: pOpt(he.p) }; }, { note: '2 層 RY＋CZ，每組初值訓練 40 步', qubits: n, twoQ: 2 * (n - 1) });
       }
       progress('量子方法：Grover 適應性搜尋', 93);
-      multi('Grover 適應性搜尋', 'quantum', r => { const gs = groverAdaptive(S, r); return { value: gs.value, z: zOf(gs.index), note: '平均約 ' + gs.calls.toLocaleString() + ' 次 Grover 疊代；每次疊代都要在線路裡算一次完整目標函數，實際成本遠高於一次古典評估' }; }, { qubits: n });
+      { const callsList = []; const gm = multi('Grover 適應性搜尋', 'quantum', r => { const gs = groverAdaptive(S, r); callsList.push(gs.calls); return { value: gs.value, z: zOf(gs.index) }; }, { qubits: n });
+        gm.note = '平均約 ' + Math.round(mean(callsList)).toLocaleString() + ' 次 Grover 疊代；每次疊代都要在線路裡算一次完整目標函數，實際成本遠高於一次古典評估'; }
       sv = { n, shots };
     }
     progress('整理報告', 96);
 
     // QUBO decoding: cost (lower is better), constraint check
     const Q = g.qubo; const costOf = cut => Q.const + Q.sumW - 2 * cut;
-    if (Q) for (const mm of methods) { const d = decodeQubo(Q, mm.z); mm.cost = costOf(mm.value); mm.costMean = costOf(mm.mean); mm.feasible = !d.viol.length; mm.viol = d.viol; mm.obj = d.obj; mm.chosen = d.chosen.slice(0, 40); }
+    if (Q) for (const mm of methods) { const d = decodeQubo(Q, mm.z); mm.cost = costOf(mm.value); mm.costMean = costOf(mm.mean); if (mm.expected != null) mm.expectedCost = costOf(mm.expected); mm.feasible = !d.viol.length; mm.viol = d.viol; mm.obj = d.obj; mm.chosen = d.chosen.slice(0, 40); }
     for (const mm of methods) delete mm.z;
     const cls = methods.filter(x => x.kind === 'classical'), qs = methods.filter(x => x.kind === 'quantum');
     const bestC = Math.max(...cls.map(x => x.value)), bestQ = Math.max(...qs.map(x => x.value));
@@ -646,12 +671,13 @@
     if (Q && Q.groups.length) { const feasC = cls.filter(x => x.feasible).length, feasQ = qs.filter(x => x.feasible).length; diags.push({ name: '限制條件是否滿足', value: '古典 ' + feasC + '/' + cls.length + ' 種方法、量子 ' + feasQ + '/' + qs.length + ' 種方法的最好答案滿足全部 ' + Q.groups.length + ' 條限制', status: feasQ < qs.length ? 'warn' : 'ok', explain: '限制是用懲罰項加進目標函數的，方法不保證一定滿足；整數規劃求解器可以直接處理限制，不需要懲罰項。' }); }
 
     let level, title; const reasons = [];
-    const gap = bestC === 0 ? 0 : (bestC - bestQ) / Math.abs(bestC);
+    const cBestC = Q ? costOf(bestC) : bestC, cBestQ = Q ? costOf(bestQ) : bestQ;
+    const gapStr = cBestC === 0 ? '差 ' + (+Math.abs(cBestQ - cBestC).toFixed(2)) : '差 ' + Math.abs((cBestC - cBestQ) / Math.abs(cBestC) * 100).toFixed(1) + '%';
     const fmtV = v => Q ? '成本 ' + (+costOf(v).toFixed(3)) : (+v.toFixed(3));
     if (!Q && ((bip && negFrac === 0) || isForest)) { level = 'red'; title = '不建議用量子：這個結構古典方法可以直接算出最佳解'; }
     else if (bestQ < bestC - 1e-9) {
       level = 'red'; title = '不建議用量子：古典方法找到更好的答案';
-      reasons.push('最好的量子方法（' + bestQm.name + '）' + fmtV(bestQ) + '，最好的古典方法 ' + fmtV(bestC) + '，差 ' + Math.abs(gap * 100).toFixed(1) + '%（雙方各跑 ' + SEEDS + ' 次取最好）。');
+      reasons.push('最好的量子方法（' + bestQm.name + '）' + fmtV(bestQ) + '，最好的古典方法 ' + fmtV(bestC) + '，' + gapStr + '（雙方各跑 ' + SEEDS + ' 次取最好）。');
     } else if (nDec <= 20) {
       level = 'red'; title = '不建議用量子：規模太小，古典窮舉就有保證最佳解';
       reasons.push('量子方法有找到同樣好的答案，但古典' + (exact ? '窮舉只要 ' + exact.ms.toFixed(0) + ' 毫秒就能保證最佳' : '方法很快就找到') + '。');
@@ -670,7 +696,7 @@
     return {
       task: 'opt', n, m, sampled: smp.sampled, originalN: smp.originalN, seeds: SEEDS, qubo: Q ? { nv: Q.nv, groups: Q.groups.map(g2 => ({ name: g2.name, k: g2.k, size: g2.members.length, penalty: g2.penalty })), mode: Q.mode } : null,
       best, bestClassical: bestC, bestQuantum: bestQ, methods, diagnostics: diags, sv, gwRelax,
-      recommend: rec, verdict: { level, title, reasons }, rqTrace: rq ? [] : []
+      recommend: rec, verdict: { level, title, reasons }, rqTrace
     };
   };
 
@@ -692,7 +718,8 @@
       }
     });
     if (!feats.length) throw new Error('找不到可用的特徵欄位（需要數值欄，或種類 10 種以內的文字欄）。');
-    let rows = t.rows.filter(rw => rw[labelIdx] !== '' && rw[labelIdx] != null);
+    let rows = t.rows.filter(rw => !isMissing(rw[labelIdx]));
+    if (rows.length < 10) throw new Error('有效樣本太少（目前 ' + rows.length + ' 筆），5 折交叉驗證至少需要 10 筆資料。');
     const classes = Array.from(new Set(rows.map(rw => rw[labelIdx]))).sort();
     if (classes.length < 2) throw new Error('預測目標欄只有一種值，無法做分類。');
     if (classes.length > 6) throw new Error('預測目標欄有 ' + classes.length + ' 種值；請選種類 6 種以內的欄位。');
@@ -701,14 +728,18 @@
     let sampled = false;
     if (rows.length > maxN) {
       sampled = true; const out = [];
-      for (const c of classes) { const arr = shuffle(by.get(c).slice(), r); const k = Math.max(5, Math.round(maxN * arr.length / rows.length)); out.push(...arr.slice(0, k)); }
-      rows = shuffle(out, r).slice(0, maxN + classes.length * 5);
+      const minPer = classes.length * 5 <= maxN ? 5 : 2;
+      for (const c of classes) { const arr = shuffle(by.get(c).slice(), r); const k = Math.min(arr.length, Math.max(minPer, Math.round(maxN * arr.length / rows.length))); out.push(...arr.slice(0, k)); }
+      rows = shuffle(out, r).slice(0, maxN);
     }
-    const means = feats.map(f => f.kind === 'num' ? mean(rows.map(rw => Number(rw[f.idx])).filter(v => isFinite(v) && rw_ok(v))) : 0);
-    function rw_ok() { return true; }
+    const means = feats.map(f => {
+      if (f.kind !== 'num') return 0;
+      const vals = rows.map(rw => rw[f.idx]).filter(v => !isMissing(v)).map(Number).filter(isFinite);
+      return vals.length ? mean(vals) : 0;
+    });
     const names = [];
     feats.forEach(f => { if (f.kind === 'num') names.push(f.name); else f.levels.forEach(l => names.push(f.name + '=' + l)); });
-    const X = rows.map(rw => { const v = []; feats.forEach((f, fi) => { if (f.kind === 'num') { const x = Number(rw[f.idx]); v.push(rw[f.idx] !== '' && isFinite(x) ? x : means[fi]); } else f.levels.forEach(l => v.push(rw[f.idx] === l ? 1 : 0)); }); return v; });
+    const X = rows.map(rw => { const v = []; feats.forEach((f, fi) => { if (f.kind === 'num') { const raw = rw[f.idx]; const x = !isMissing(raw) ? Number(raw) : NaN; v.push(isFinite(x) ? x : means[fi]); } else f.levels.forEach(l => v.push(rw[f.idx] === l ? 1 : 0)); }); return v; });
     const y = rows.map(rw => classes.indexOf(rw[labelIdx]));
     // standardize
     const d = names.length;
@@ -814,7 +845,7 @@
       for (const i of tr) { const x = X[i]; const { h, p } = fwd(x); const dh = new Float64Array(H);
         for (let c = 0; c < nc; c++) { const g = p[c] - (y[i] === c ? 1 : 0); const Gc = G[H + c]; for (let j = 0; j < H; j++) { Gc[j] += g * h[j]; dh[j] += g * W2[c][j]; } Gc[H] += g; }
         for (let k = 0; k < H; k++) { const g = dh[k] * (1 - h[k] * h[k]); const Gk = G[k]; for (let j = 0; j < d; j++) Gk[j] += g * x[j]; Gk[d] += g; } }
-      params.forEach((p, a) => { for (let j = 0; j < p.length; j++) { const g = G[a][j] / tr.length + lam * p[j]; M[a][j] = 0.9 * M[a][j] + 0.1 * g; V[a][j] = 0.999 * V[a][j] + 0.001 * g * g; p[j] -= 0.02 * (M[a][j] / (1 - Math.pow(0.9, ep + 1))) / (Math.sqrt(V[a][j] / (1 - Math.pow(0.999, ep + 1))) + 1e-8); } });
+      params.forEach((p, a) => { for (let j = 0; j < p.length; j++) { const g = G[a][j] / tr.length + (j < p.length - 1 ? lam * p[j] : 0); M[a][j] = 0.9 * M[a][j] + 0.1 * g; V[a][j] = 0.999 * V[a][j] + 0.001 * g * g; p[j] -= 0.02 * (M[a][j] / (1 - Math.pow(0.9, ep + 1))) / (Math.sqrt(V[a][j] / (1 - Math.pow(0.999, ep + 1))) + 1e-8); } });
     }
     return te.map(i => { const { p } = fwd(X[i]); let b = 0; for (let c = 1; c < nc; c++) if (p[c] > p[b]) b = c; return b; });
   }
@@ -932,7 +963,8 @@
     models.push(mkKRR('RBF 核函數（全部特徵）', 'classical', rbfFull));
     models.push({ name: 'k 近鄰（全部特徵）', kind: 'classical', type: 'knn', grid: [3, 5, 9, 15].map(k => ({ M: Dfull, k, label: 'k=' + k })) });
     const rbfZ = rbfFrom(Dz, q);
-    models.push(mkKRR('RBF 核函數（同樣 ' + q + ' 維輸入）', 'classical', rbfZ));
+    const rbfZName = 'RBF 核函數（同樣 ' + q + ' 維輸入）';
+    models.push(mkKRR(rbfZName, 'classical', rbfZ));
     progress('計算量子核函數（' + q + ' 量子位元 ZZ 特徵映射）', 30);
     const lams = [0.05, 0.1, 0.2, 0.4, 0.8];
     const QK = lams.map((l, i) => { progress('量子核函數：頻寬 ' + l, 30 + i * 8); return { K: quantumKernel(Z, l), label: '頻寬=' + l, lam: l }; });
@@ -960,11 +992,15 @@
     const conc = QK.map(k => { const vals = []; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) vals.push(k.K[i][j]); return { lam: k.lam, mean: mean(vals), sd: std(vals) }; });
     const freq = new Map(); qzz.chosen.forEach(c => { const l = c.split(',')[0]; freq.set(l, (freq.get(l) || 0) + 1); });
     const lamLabel = Array.from(freq.entries()).sort((a, b) => b[1] - a[1])[0][0];
-    const kq = QK.find(k => k.label === lamLabel);
-    const ng = Math.min(n, 100); const sub = Array.from({ length: ng }, (_, i) => i);
-    const bestRbfZ = rbfZ[2];
-    const gcq = geometricDifference(sub.map(i => sub.map(j => bestRbfZ.K[i][j])), sub.map(i => sub.map(j => kq.K[i][j])), 0.01 * ng);
-    const concChosen = conc.find(c => 'λ' && c.lam === kq.lam);
+    const kq = QK.find(k => k.label === lamLabel) || QK[0];
+    const rbfZRes = res.find(m => m.name === rbfZName);
+    const rbfFreq = new Map(); if (rbfZRes) rbfZRes.chosen.forEach(c => { const l = c.split(',')[0]; rbfFreq.set(l, (rbfFreq.get(l) || 0) + 1); });
+    const rbfTop = Array.from(rbfFreq.entries()).sort((a, b) => b[1] - a[1])[0];
+    const bestRbfZ = (rbfTop && rbfZ.find(k => k.label === rbfTop[0])) || rbfZ[2];
+    const ng = Math.min(n, 100);
+    const sub = shuffle(Array.from({ length: n }, (_, i) => i), rng((opts.seed || 23) + 77)).slice(0, ng);
+    const gcq = geometricDifference(sub.map(i => sub.map(j => bestRbfZ.K[i][j])), sub.map(i => sub.map(j => kq.K[i][j])), 0.01);
+    const concChosen = conc.find(c => c.lam === kq.lam);
     const diags = [];
     diags.push({ name: '樣本數', value: n + ' 筆' + (P.sampled ? '（從 ' + P.totalRows + ' 筆中分層抽樣）' : ''), status: n < 60 ? 'warn' : 'ok', explain: n < 60 ? '樣本太少，交叉驗證分數的誤差會很大。' : '足夠做初步比較。' });
     diags.push({ name: '輸入壓縮', value: X[0].length + ' 個特徵 → ' + q + ' 維（保留 ' + (pc.explained * 100).toFixed(0) + '% 變異）', status: pc.explained < 0.6 ? 'warn' : 'ok', explain: '量子線路的量子位元數有限，所以先用主成分分析壓縮。古典模型同時用完整特徵和壓縮後特徵各測一次。' });
@@ -992,9 +1028,9 @@
     const bitsSpec = cols.map(p => {
       const vals = t.rows.map(rw => rw[p.index]);
       let fn, desc;
-      if (p.binary) { const lv = Array.from(new Set(vals.filter(v => v !== ''))).sort(); fn = v => v === lv[1] ? 1 : 0; desc = '= ' + lv[1]; }
-      else if (p.numeric) { const md = median(vals.map(Number).filter(isFinite)); fn = v => Number(v) > md ? 1 : 0; desc = '> 中位數 ' + (+md.toPrecision(4)); }
-      else { const cnt = new Map(); vals.forEach(v => cnt.set(v, (cnt.get(v) || 0) + 1)); const mode = Array.from(cnt.entries()).sort((a, b) => b[1] - a[1])[0][0]; fn = v => v === mode ? 1 : 0; desc = '= ' + mode; }
+      if (p.binary) { const lv = Array.from(new Set(vals.filter(v => !isMissing(v)))).sort(); fn = v => v === lv[1] ? 1 : 0; desc = '= ' + lv[1]; }
+      else if (p.numeric) { const numVals = vals.filter(v => !isMissing(v)).map(Number).filter(isFinite); const md = median(numVals); fn = v => (!isMissing(v) && isFinite(Number(v)) && Number(v) > md) ? 1 : 0; desc = '> 中位數 ' + (+md.toPrecision(4)); }
+      else { const nonM = vals.filter(v => !isMissing(v)); const cnt = new Map(); (nonM.length ? nonM : vals).forEach(v => cnt.set(v, (cnt.get(v) || 0) + 1)); const mode = Array.from(cnt.entries()).sort((a, b) => b[1] - a[1])[0][0]; fn = v => v === mode ? 1 : 0; desc = '= ' + mode; }
       const bits = vals.map(fn); const pr = mean(bits); const H = pr <= 0 || pr >= 1 ? 0 : -(pr * Math.log2(pr) + (1 - pr) * Math.log2(1 - pr));
       return { name: p.name, idx: p.index, fn, desc, H };
     }).filter(b => b.H > 0.05);
@@ -1020,9 +1056,11 @@
       const ar = Float64Array.from(vr), ai = Float64Array.from(vi); fwht(ar); fwht(ai); for (let s = 0; s < N; s++) { ar[s] *= u; ai[s] *= u; }
       return { vr, vi, ar, ai };
     };
-    let last = null;
+    let bestLoss = Infinity, bestTh = th.slice();
     for (let st = 0; st < steps; st++) {
       const { vr, vi, ar, ai } = forward(th);
+      let loss = 0; for (let x = 0; x < N; x++) if (c[x]) loss -= c[x] * Math.log(Math.max(ar[x] * ar[x] + ai[x] * ai[x], 1e-15));
+      if (loss < bestLoss) { bestLoss = loss; bestTh = th.slice(); }
       // b_x = c_x conj(a_x)/|a_x|^2 ; h = H b ; grad_k = 2 Im Σ_z f_k(z) v_z h_z  (loss = -Σ c log|a|^2, natural log)
       const br = new Float64Array(N), bi = new Float64Array(N);
       for (let x = 0; x < N; x++) { if (!c[x]) continue; const p = Math.max(ar[x] * ar[x] + ai[x] * ai[x], 1e-15); br[x] = c[x] * ar[x] / p; bi[x] = -c[x] * ai[x] / p; }
@@ -1035,7 +1073,12 @@
         th[k] -= lr * mh / (Math.sqrt(vh) + 1e-8);
       }
       if (progress && st % 50 === 0) progress('訓練量子生成模型（IQP 線路）：第 ' + st + ' / ' + steps + ' 步', 40 + 50 * st / steps);
-      last = ar;
+    }
+    if (steps > 0) {
+      const { ar: far, ai: fai } = forward(th);
+      let finLoss = 0; for (let x = 0; x < N; x++) if (c[x]) finLoss -= c[x] * Math.log(Math.max(far[x] * far[x] + fai[x] * fai[x], 1e-15));
+      if (finLoss < bestLoss) bestTh = th.slice();
+      th = bestTh;
     }
     const { ar, ai } = forward(th);
     const p = new Float64Array(N); for (let s = 0; s < N; s++) p[s] = ar[s] * ar[s] + ai[s] * ai[s];
@@ -1048,7 +1091,7 @@
     const p1 = []; for (let i = 0; i < nb; i++) p1.push((train.reduce((s, x) => s + bit(x, i), 0) + 1) / (n + 2));
     const joint = (i, j) => { const c = [1, 1, 1, 1]; for (const x of train) c[bit(x, i) * 2 + bit(x, j)]++; const t = n + 4; return c.map(v => v / t); };
     const MI = []; for (let i = 0; i < nb; i++) MI.push(new Float64Array(nb));
-    for (let i = 0; i < nb; i++) for (let j = i + 1; j < nb; j++) { const J = joint(i, j); let m = 0; for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) { const pa = a ? p1[i] : 1 - p1[i], pb = b ? p1[j] : 1 - p1[j]; m += J[a * 2 + b] * Math.log(J[a * 2 + b] / (pa * pb)); } MI[i][j] = MI[j][i] = m; }
+    for (let i = 0; i < nb; i++) for (let j = i + 1; j < nb; j++) { const J = joint(i, j); const pa = [J[0] + J[1], J[2] + J[3]], pb = [J[0] + J[2], J[1] + J[3]]; let m = 0; for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) m += J[a * 2 + b] * Math.log(J[a * 2 + b] / (pa[a] * pb[b])); MI[i][j] = MI[j][i] = m; }
     const inT = [0], parent = new Array(nb).fill(-1); const used = new Set([0]);
     while (used.size < nb) { let bi = -1, bj = -1, bv = -1; for (const i of used) for (let j = 0; j < nb; j++) if (!used.has(j) && MI[i][j] > bv) { bv = MI[i][j]; bi = i; bj = j; } parent[bj] = bi; used.add(bj); inT.push(bj); }
     const cond = parent.map((pa, j) => { if (pa < 0) return null; const c = [[1, 1], [1, 1]]; for (const x of train) c[bit(x, pa)][bit(x, j)]++; return c.map(rw => { const t = rw[0] + rw[1]; return [rw[0] / t, rw[1] / t]; }); });
@@ -1118,8 +1161,9 @@
       { let bk = 2, bv = Infinity; for (const K of [2, 4, 8]) { const v = nllBits(bernMix(nb, inner, K, r), val); if (v < bv) { bv = v; bk = K; } }
         add('伯努利混合模型', 'classical', bernMix(nb, train, bk, r), bk * (nb + 1) - 1, bk + ' 群（在訓練資料內挑）'); }
       progress('第 ' + (sd + 1) + '/' + SEEDS + ' 次切分：IQP 量子生成模型', base + 40 / SEEDS);
-      let iq = null; for (const sig of [0.05, 0.4, 0.8, 1.2]) { const cand = trainIQP(nb, train, opts.steps || 800, r, null, sig); if (!iq || nllBits(x => cand.p[x], train) < nllBits(x => iq.p[x], train)) iq = cand; }
-      add('IQP 量子電路生成模型（' + nb + ' 量子位元）', 'quantum', x => iq.p[x], iq.params, '4 組隨機初值，取訓練損失最低的');
+      let bSig = 0.05, bVal = Infinity; for (const sig of [0.05, 0.4, 0.8, 1.2]) { const cand = trainIQP(nb, inner, opts.steps || 800, r, null, sig); const v = nllBits(x => cand.p[x], val); if (v < bVal) { bVal = v; bSig = sig; } }
+      const iq = trainIQP(nb, train, opts.steps || 800, r, null, bSig);
+      add('IQP 量子電路生成模型（' + nb + ' 量子位元）', 'quantum', x => iq.p[x], iq.params, '4 組隨機初值（在訓練資料內驗證挑初值）');
       progress('第 ' + (sd + 1) + '/' + SEEDS + ' 次切分：QCBM', base + 75 / SEEDS);
       const c = new Float64Array(N); train.forEach(x => c[x] += 1 / train.length);
       const he = trainHE(nb, 3, p => p.map((v, x) => c[x] ? -c[x] / Math.max(v, 1e-12) : 0), nb <= 8 ? 250 : 120, r, 0.05);
